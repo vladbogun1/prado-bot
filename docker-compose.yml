@@ -39,7 +39,7 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
 
       DB_HOST: db
-      DB_PORT: 3320
+      DB_PORT: 3306
       DB_NAME: ${DB_NAME:-voice_bot}
       DB_USER: ${DB_USER:-bot}
       DB_PASSWORD: ${DB_PASSWORD:-botpass}
