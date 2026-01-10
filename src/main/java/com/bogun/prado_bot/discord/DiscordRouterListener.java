@@ -18,8 +18,12 @@ import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.EventListener;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 
 @Component
@@ -28,6 +32,9 @@ public class DiscordRouterListener implements EventListener {
 
     private final VoiceTrackingService tracking;
     private final VoiceBoardService boards;
+
+    @Value("${app.timezone:UTC}")
+    private String appTimezone;
 
     @Override
     public void onEvent(GenericEvent event) {
@@ -89,6 +96,11 @@ public class DiscordRouterListener implements EventListener {
 
     private void initialVoicesScan(GenericEvent event) {
         event.getJDA().getGuilds().forEach(guild -> {
+            Instant now = Instant.now();
+            ZoneId zone = ZoneId.of(appTimezone);
+            Instant boundary = LocalDate.ofInstant(now, zone).atStartOfDay(zone).toInstant();
+            tracking.closeActiveSessionsBefore(guild.getIdLong(), boundary);
+
             guild.getVoiceStates().forEach(voiceState -> {
                 var member = voiceState.getMember();
                 var userId = member.getIdLong();
@@ -98,14 +110,15 @@ public class DiscordRouterListener implements EventListener {
 
                 if (isBot(member)) return;
 
-                tracking.onJoin(
+                tracking.ensureSessionAtBoundary(
                         guild.getIdLong(),
                         userId,
                         username,
                         memberName,
                         Objects.requireNonNull(joined).getIdLong(),
                         joined.getName(),
-                        flags(member));
+                        flags(member),
+                        boundary);
             });
         });
     }
