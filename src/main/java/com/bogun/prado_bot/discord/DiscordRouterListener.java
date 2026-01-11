@@ -1,6 +1,8 @@
 package com.bogun.prado_bot.discord;
 
 import com.bogun.prado_bot.discord.board.VoiceBoardFormatter;
+import com.bogun.prado_bot.config.PradoGameProperties;
+import com.bogun.prado_bot.service.game.GameSessionService;
 import com.bogun.prado_bot.service.VoiceBoardService;
 import com.bogun.prado_bot.service.VoiceLeaderboardService;
 import com.bogun.prado_bot.service.VoiceTrackingService;
@@ -23,6 +25,7 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -41,9 +44,12 @@ public class DiscordRouterListener implements EventListener {
     private final VoiceTrackingService tracking;
     private final VoiceBoardService boards;
     private final VoiceLeaderboardService leaderboard;
+    private final GameSessionService gameSessionService;
+    private final PradoGameProperties pradoGameProperties;
 
     private static final String VOICE_INFO_COMMAND = "voice_info";
     private static final String VOICE_INFO_BUTTON_PREFIX = "voice-info:";
+    private static final String PRADO_GAME_COMMAND = "prado_game";
 
     private enum VoiceInfoPeriod {
         DAY,
@@ -63,7 +69,13 @@ public class DiscordRouterListener implements EventListener {
                     Commands.slash("voiceboard", "Создать/обновить табло voice-статистики")
                             .addOption(OptionType.INTEGER, "refresh", "сек между обновлениями", false)
                             .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
-                    Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням")
+                    Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням"),
+                    Commands.slash(PRADO_GAME_COMMAND, "Запустить мини-игру Prado Job")
+                            .addSubcommands(
+                                    new SubcommandData("start", "Начать миссию"),
+                                    new SubcommandData("status", "Показать статус"),
+                                    new SubcommandData("quit", "Завершить миссию")
+                            )
             ).queue();
             initialVoicesScan(e);
             return;
@@ -199,6 +211,10 @@ public class DiscordRouterListener implements EventListener {
         }
         if (VOICE_INFO_COMMAND.equals(e.getName())) {
             onVoiceInfoSlash(e);
+            return;
+        }
+        if (PRADO_GAME_COMMAND.equals(e.getName())) {
+            onPradoGameSlash(e);
         }
     }
 
@@ -242,8 +258,16 @@ public class DiscordRouterListener implements EventListener {
 
     private void onButton(ButtonInteractionEvent e) {
         String id = e.getComponentId();
-        if (!id.startsWith(VOICE_INFO_BUTTON_PREFIX)) return;
+        if (id.startsWith(VOICE_INFO_BUTTON_PREFIX)) {
+            handleVoiceInfoButton(e, id);
+            return;
+        }
+        if (id.startsWith(gameSessionService.buttonPrefix())) {
+            handlePradoGameButton(e, id);
+        }
+    }
 
+    private void handleVoiceInfoButton(ButtonInteractionEvent e, String id) {
         String payload = id.substring(VOICE_INFO_BUTTON_PREFIX.length());
         String[] parts = payload.split(":", 3);
         if (parts.length != 3) return;
@@ -277,6 +301,102 @@ public class DiscordRouterListener implements EventListener {
         var buttons = buildVoiceInfoButtons(date, today, period, ownerId);
 
         e.editMessageEmbeds(embed).setComponents(ActionRow.of(buttons)).queue();
+    }
+
+    private void handlePradoGameButton(ButtonInteractionEvent e, String id) {
+        String payload = id.substring(gameSessionService.buttonPrefix().length());
+        String[] parts = payload.split(":", 3);
+        if (parts.length != 3) {
+            e.reply("Кнопка устарела.").setEphemeral(true).queue();
+            return;
+        }
+
+        long sessionId;
+        int version;
+        try {
+            sessionId = Long.parseLong(parts[0]);
+            version = Integer.parseInt(parts[2]);
+        } catch (NumberFormatException ex) {
+            e.reply("Кнопка устарела.").setEphemeral(true).queue();
+            return;
+        }
+
+        String actionKey = parts[1];
+        var member = e.getMember();
+        if (member == null) {
+            e.reply("Не удалось определить пользователя.").setEphemeral(true).queue();
+            return;
+        }
+
+        GameSessionService.GameView view;
+        try {
+            view = gameSessionService.applyAction(
+                    sessionId,
+                    e.getUser().getIdLong(),
+                    actionKey,
+                    version,
+                    e.getUser().getName(),
+                    member.getEffectiveName()
+            );
+        } catch (RuntimeException ex) {
+            e.reply("Не удалось обработать ход.").setEphemeral(true).queue();
+            return;
+        }
+
+        if (view.errorMessage() != null) {
+            e.reply(view.errorMessage()).setEphemeral(true).queue();
+            return;
+        }
+
+        e.editMessageEmbeds(view.embed()).setComponents(view.components()).queue();
+
+        if (view.ended() && view.publicSummary() != null && view.publicChannelId() != null) {
+            var channel = e.getJDA().getTextChannelById(view.publicChannelId());
+            if (channel != null) {
+                channel.sendMessage(\"<@\" + e.getUser().getId() + \"> завершил миссию.\\n\" + view.publicSummary()).queue();
+            }
+        }
+    }
+
+    private void onPradoGameSlash(SlashCommandInteractionEvent e) {
+        if (e.getGuild() == null) {
+            e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
+            return;
+        }
+        String sub = e.getSubcommandName();
+        if (sub == null) sub = "start";
+
+        var member = e.getMember();
+        if (member == null) {
+            e.reply("Не удалось определить пользователя.").setEphemeral(true).queue();
+            return;
+        }
+
+        long guildId = e.getGuild().getIdLong();
+        long userId = e.getUser().getIdLong();
+        long channelId = e.getChannel().getIdLong();
+        String username = e.getUser().getName();
+        String memberName = member.getEffectiveName();
+
+        GameSessionService.GameView view = switch (sub) {
+            case "quit" -> gameSessionService.quitActiveSession(guildId, userId);
+            case "status" -> gameSessionService.status(guildId, userId);
+            default -> gameSessionService.startSession(guildId, userId, channelId, username, memberName);
+        };
+
+        if (view.errorMessage() != null) {
+            e.reply(view.errorMessage()).setEphemeral(true).queue();
+            return;
+        }
+
+        e.replyEmbeds(view.embed()).setComponents(view.components()).setEphemeral(pradoGameProperties.isEphemeral()).queue();
+
+        if (view.ended() && view.publicSummary() != null && view.publicChannelId() != null) {
+            var channel = e.getJDA().getTextChannelById(view.publicChannelId());
+            if (channel != null) {
+                channel.sendMessage("<@" + e.getUser().getId() + "> завершил миссию.\n" + view.publicSummary()).queue();
+            }
+        }
     }
 
     private net.dv8tion.jda.api.entities.MessageEmbed buildVoiceInfoEmbed(long guildId, LocalDate date,

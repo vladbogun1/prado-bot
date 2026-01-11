@@ -3,6 +3,15 @@ app:
   board:
     defaultRefreshSeconds: 30
     defaultLimit: 20
+  prado-game:
+    cooldown-minutes: 5
+    session-timeout-minutes: 15
+    daily-cap: 40
+    max-steps: 12
+    ephemeral: true
+    voice-bonus-seconds: 1800
+    voice-success-bonus: 0.05
+    expire-check-ms: 60000
 
 discord:
   token: "${DISCORD_TOKEN}"
