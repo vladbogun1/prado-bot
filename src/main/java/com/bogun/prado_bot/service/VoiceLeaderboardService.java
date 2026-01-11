@@ -42,10 +42,17 @@ public class VoiceLeaderboardService {
     public List<TodayRow> getTopForDate(long guildId, LocalDate date, int limit) {
         ZoneId zone = ZoneId.of(appTimezone);
         Instant now = Instant.now();
-        return getTopForDate(guildId, date, limit, now, zone);
+        Range range = dayRange(zone, date);
+        boolean includeActive = date.equals(LocalDate.ofInstant(now, zone));
+        return getTopForRange(guildId, range.start(), range.end(), limit, includeActive, now);
     }
 
     /* ===================== helpers ===================== */
+
+    @Transactional(readOnly = true)
+    public List<TodayRow> getTopForRange(long guildId, Instant start, Instant end, int limit, boolean includeActive) {
+        return getTopForRange(guildId, start, end, limit, includeActive, Instant.now());
+    }
 
     private List<TodayRow> getTopForDate(long guildId, LocalDate date, int limit, Instant now, ZoneId zone) {
         int lim = limit > 0 ? limit : 20;
@@ -53,6 +60,13 @@ public class VoiceLeaderboardService {
         Range r = dayRange(zone, date);
         Instant start = r.start();
         Instant end = r.end();
+        boolean includeActive = date.equals(LocalDate.ofInstant(now, zone));
+        return getTopForRange(guildId, start, end, lim, includeActive, now);
+    }
+
+    private List<TodayRow> getTopForRange(long guildId, Instant start, Instant end, int limit,
+                                          boolean includeActive, Instant now) {
+        int lim = limit > 0 ? limit : 20;
 
         List<VoiceSessionRepository.UserRangeAgg> agg =
                 sessionRepo.aggregateByUserForRange(guildId, start, end);
@@ -76,8 +90,7 @@ public class VoiceLeaderboardService {
             });
         }
 
-        LocalDate today = LocalDate.ofInstant(now, zone);
-        if (today.equals(date)) {
+        if (includeActive) {
             List<VoiceSession> activeToday =
                     sessionRepo.findAllByGuildIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
                             guildId, start, end
@@ -93,7 +106,7 @@ public class VoiceLeaderboardService {
 
                 map.computeIfAbsent(s.getUserId(), uid -> new Mutable(uid, 0, 0, 0))
                         .totalSeconds += extra;
-            }
+                }
         }
 
         return map.values().stream()
