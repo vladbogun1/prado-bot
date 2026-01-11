@@ -24,9 +24,7 @@ services:
       retries: 30
 
   bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME}/prado-bot:${BOT_TAG:-latest}
     container_name: prado-bot
     restart: unless-stopped
     depends_on:
