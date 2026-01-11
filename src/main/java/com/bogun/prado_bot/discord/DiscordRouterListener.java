@@ -228,7 +228,7 @@ public class DiscordRouterListener implements EventListener {
         var embed = buildVoiceInfoEmbed(e.getGuild().getIdLong(), today, 20, zone);
         var buttons = buildVoiceInfoButtons(today, today, e.getUser().getIdLong());
 
-        e.replyEmbeds(embed).addActionRow(buttons).setEphemeral(true).queue();
+        e.replyEmbeds(embed).setComponents(ActionRow.of(buttons)).setEphemeral(true).queue();
     }
 
     private void onButton(ButtonInteractionEvent e) {
