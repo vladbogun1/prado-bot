@@ -25,6 +25,7 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -70,13 +71,12 @@ public class DiscordRouterListener implements EventListener {
                             .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
                     Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням"),
                     Commands.slash(PRADO_GAME_COMMAND, "Запустить мини-игру Prado Job")
-                            .addOption(OptionType.STRING, "mode", "start/status/quit", false,
-                                    option -> option.addChoices(
+                            .addOptions(new OptionData(OptionType.STRING, "mode", "start/status/quit", false)
+                                    .addChoices(
                                             new net.dv8tion.jda.api.interactions.commands.Command.Choice("start", "start"),
                                             new net.dv8tion.jda.api.interactions.commands.Command.Choice("status", "status"),
                                             new net.dv8tion.jda.api.interactions.commands.Command.Choice("quit", "quit")
-                                    )
-                            )
+                                    ))
             ).queue();
             initialVoicesScan(e);
             return;
