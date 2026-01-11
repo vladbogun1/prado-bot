@@ -328,21 +328,19 @@ public class DiscordRouterListener implements EventListener {
     }
 
     private Button buildToggleButton(long ownerId, VoiceInfoPeriod period, LocalDate date) {
-        if (period == VoiceInfoPeriod.MONTH) {
-            return Button.secondary(
-                    voiceInfoPayload(ownerId, VoiceInfoPeriod.WEEK, date),
-                    "Неделя"
-            );
-        }
-        if (period == VoiceInfoPeriod.WEEK) {
-            return Button.secondary(
-                    voiceInfoPayload(ownerId, VoiceInfoPeriod.MONTH, date),
-                    "Месяц"
-            );
-        }
+        var nextPeriod = switch (period) {
+            case DAY -> VoiceInfoPeriod.WEEK;
+            case WEEK -> VoiceInfoPeriod.MONTH;
+            case MONTH -> VoiceInfoPeriod.DAY;
+        };
+        var label = switch (nextPeriod) {
+            case DAY -> "День";
+            case WEEK -> "Неделя";
+            case MONTH -> "Месяц";
+        };
         return Button.secondary(
-                voiceInfoPayload(ownerId, VoiceInfoPeriod.WEEK, date),
-                "Неделя"
+                voiceInfoPayload(ownerId, nextPeriod, date),
+                label
         );
     }
 
