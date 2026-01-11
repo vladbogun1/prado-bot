@@ -1,9 +1,21 @@
 ALTER TABLE game_session
     ADD COLUMN node_key VARCHAR(40) NOT NULL DEFAULT '',
     ADD COLUMN tail_level INT NOT NULL DEFAULT 0,
-    ADD COLUMN flags_json TEXT NOT NULL DEFAULT '[]',
-    ADD COLUMN checkpoints_json TEXT NOT NULL DEFAULT '[]',
+    ADD COLUMN flags_json TEXT NULL,
+    ADD COLUMN checkpoints_json TEXT NULL,
     ADD COLUMN earned_temp INT NOT NULL DEFAULT 0;
+
+UPDATE game_session
+SET flags_json = '[]'
+WHERE flags_json IS NULL;
+
+UPDATE game_session
+SET checkpoints_json = '[]'
+WHERE checkpoints_json IS NULL;
+
+ALTER TABLE game_session
+    MODIFY flags_json TEXT NOT NULL,
+    MODIFY checkpoints_json TEXT NOT NULL;
 
 ALTER TABLE game_scene
     ADD COLUMN node_key VARCHAR(40) NULL;
