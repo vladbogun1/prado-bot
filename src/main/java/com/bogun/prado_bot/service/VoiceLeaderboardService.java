@@ -32,14 +32,41 @@ public class VoiceLeaderboardService {
 
     @Transactional(readOnly = true)
     public List<TodayRow> getTodayTop(long guildId, int limit) {
-        int lim = limit > 0 ? limit : 20;
-
         ZoneId zone = ZoneId.of(appTimezone);
         Instant now = Instant.now();
+        LocalDate today = LocalDate.ofInstant(now, zone);
+        return getTopForDate(guildId, today, limit, now, zone);
+    }
 
-        Range r = todayRange(zone, now);
+    @Transactional(readOnly = true)
+    public List<TodayRow> getTopForDate(long guildId, LocalDate date, int limit) {
+        ZoneId zone = ZoneId.of(appTimezone);
+        Instant now = Instant.now();
+        Range range = dayRange(zone, date);
+        boolean includeActive = date.equals(LocalDate.ofInstant(now, zone));
+        return getTopForRange(guildId, range.start(), range.end(), limit, includeActive, now);
+    }
+
+    /* ===================== helpers ===================== */
+
+    @Transactional(readOnly = true)
+    public List<TodayRow> getTopForRange(long guildId, Instant start, Instant end, int limit, boolean includeActive) {
+        return getTopForRange(guildId, start, end, limit, includeActive, Instant.now());
+    }
+
+    private List<TodayRow> getTopForDate(long guildId, LocalDate date, int limit, Instant now, ZoneId zone) {
+        int lim = limit > 0 ? limit : 20;
+
+        Range r = dayRange(zone, date);
         Instant start = r.start();
         Instant end = r.end();
+        boolean includeActive = date.equals(LocalDate.ofInstant(now, zone));
+        return getTopForRange(guildId, start, end, lim, includeActive, now);
+    }
+
+    private List<TodayRow> getTopForRange(long guildId, Instant start, Instant end, int limit,
+                                          boolean includeActive, Instant now) {
+        int lim = limit > 0 ? limit : 20;
 
         List<VoiceSessionRepository.UserRangeAgg> agg =
                 sessionRepo.aggregateByUserForRange(guildId, start, end);
@@ -63,21 +90,23 @@ public class VoiceLeaderboardService {
             });
         }
 
-        List<VoiceSession> activeToday =
-                sessionRepo.findAllByGuildIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
-                        guildId, start, end
-                );
+        if (includeActive) {
+            List<VoiceSession> activeToday =
+                    sessionRepo.findAllByGuildIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+                            guildId, start, end
+                    );
 
-        for (VoiceSession s : activeToday) {
-            if (s.isPaused()) continue;
-            Instant last = s.getLastStateAt();
-            if (last == null) continue;
+            for (VoiceSession s : activeToday) {
+                if (s.isPaused()) continue;
+                Instant last = s.getLastStateAt();
+                if (last == null) continue;
 
-            long extra = Duration.between(last, now).getSeconds();
-            if (extra < 0) extra = 0;
+                long extra = Duration.between(last, now).getSeconds();
+                if (extra < 0) extra = 0;
 
-            map.computeIfAbsent(s.getUserId(), uid -> new Mutable(uid, 0, 0, 0))
-                    .totalSeconds += extra;
+                map.computeIfAbsent(s.getUserId(), uid -> new Mutable(uid, 0, 0, 0))
+                        .totalSeconds += extra;
+                }
         }
 
         return map.values().stream()
@@ -90,12 +119,9 @@ public class VoiceLeaderboardService {
                 .toList();
     }
 
-    /* ===================== helpers ===================== */
-
-    private static Range todayRange(ZoneId zone, Instant now) {
-        LocalDate today = LocalDate.ofInstant(now, zone);
-        Instant start = today.atStartOfDay(zone).toInstant();
-        Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
+    private static Range dayRange(ZoneId zone, LocalDate date) {
+        Instant start = date.atStartOfDay(zone).toInstant();
+        Instant end = date.plusDays(1).atStartOfDay(zone).toInstant();
         return new Range(start, end);
     }
 

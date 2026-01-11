@@ -1,6 +1,8 @@
 package com.bogun.prado_bot.discord;
 
+import com.bogun.prado_bot.discord.board.VoiceBoardFormatter;
 import com.bogun.prado_bot.service.VoiceBoardService;
+import com.bogun.prado_bot.service.VoiceLeaderboardService;
 import com.bogun.prado_bot.service.VoiceTrackingService;
 import lombok.RequiredArgsConstructor;
 import net.dv8tion.jda.api.entities.Member;
@@ -14,8 +16,11 @@ import net.dv8tion.jda.api.events.guild.voice.GuildVoiceSelfMuteEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceSuppressEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.EventListener;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +29,10 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
+import java.time.DayOfWeek;
 import java.util.Objects;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -32,6 +40,16 @@ public class DiscordRouterListener implements EventListener {
 
     private final VoiceTrackingService tracking;
     private final VoiceBoardService boards;
+    private final VoiceLeaderboardService leaderboard;
+
+    private static final String VOICE_INFO_COMMAND = "voice_info";
+    private static final String VOICE_INFO_BUTTON_PREFIX = "voice-info:";
+
+    private enum VoiceInfoPeriod {
+        DAY,
+        WEEK,
+        MONTH
+    }
 
     @Value("${app.timezone:UTC}")
     private String appTimezone;
@@ -44,7 +62,8 @@ public class DiscordRouterListener implements EventListener {
             e.getJDA().updateCommands().addCommands(
                     Commands.slash("voiceboard", "Создать/обновить табло voice-статистики")
                             .addOption(OptionType.INTEGER, "refresh", "сек между обновлениями", false)
-                            .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false)
+                            .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
+                    Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням")
             ).queue();
             initialVoicesScan(e);
             return;
@@ -53,6 +72,11 @@ public class DiscordRouterListener implements EventListener {
         // 2) Slash commands
         if (event instanceof SlashCommandInteractionEvent e) {
             onSlash(e);
+            return;
+        }
+
+        if (event instanceof ButtonInteractionEvent e) {
+            onButton(e);
             return;
         }
 
@@ -169,7 +193,16 @@ public class DiscordRouterListener implements EventListener {
     }
 
     private void onSlash(SlashCommandInteractionEvent e) {
-        if (!"voiceboard".equals(e.getName())) return;
+        if ("voiceboard".equals(e.getName())) {
+            onVoiceBoardSlash(e);
+            return;
+        }
+        if (VOICE_INFO_COMMAND.equals(e.getName())) {
+            onVoiceInfoSlash(e);
+        }
+    }
+
+    private void onVoiceBoardSlash(SlashCommandInteractionEvent e) {
 
         if (e.getGuild() == null) {
             e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
@@ -191,6 +224,172 @@ public class DiscordRouterListener implements EventListener {
                 "voice-today"
         ));
     }
+
+    private void onVoiceInfoSlash(SlashCommandInteractionEvent e) {
+        if (e.getGuild() == null) {
+            e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
+            return;
+        }
+
+        ZoneId zone = ZoneId.of(appTimezone);
+        LocalDate today = LocalDate.now(zone);
+        var period = VoiceInfoPeriod.DAY;
+        var embed = buildVoiceInfoEmbed(e.getGuild().getIdLong(), today, period, 20, zone);
+        var buttons = buildVoiceInfoButtons(today, today, period, e.getUser().getIdLong());
+
+        e.replyEmbeds(embed).setComponents(ActionRow.of(buttons)).setEphemeral(true).queue();
+    }
+
+    private void onButton(ButtonInteractionEvent e) {
+        String id = e.getComponentId();
+        if (!id.startsWith(VOICE_INFO_BUTTON_PREFIX)) return;
+
+        String payload = id.substring(VOICE_INFO_BUTTON_PREFIX.length());
+        String[] parts = payload.split(":", 3);
+        if (parts.length != 3) return;
+
+        long ownerId;
+        VoiceInfoPeriod period;
+        LocalDate date;
+        try {
+            ownerId = Long.parseLong(parts[0]);
+            period = VoiceInfoPeriod.valueOf(parts[1]);
+            date = LocalDate.parse(parts[2]);
+        } catch (RuntimeException ex) {
+            e.reply("Не удалось обработать запрос.").setEphemeral(true).queue();
+            return;
+        }
+
+        if (e.getUser().getIdLong() != ownerId) {
+            e.reply("Эта панель доступна только автору команды.").setEphemeral(true).queue();
+            return;
+        }
+
+        if (e.getGuild() == null) {
+            e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
+            return;
+        }
+
+        ZoneId zone = ZoneId.of(appTimezone);
+        LocalDate today = LocalDate.now(zone);
+
+        var embed = buildVoiceInfoEmbed(e.getGuild().getIdLong(), date, period, 20, zone);
+        var buttons = buildVoiceInfoButtons(date, today, period, ownerId);
+
+        e.editMessageEmbeds(embed).setComponents(ActionRow.of(buttons)).queue();
+    }
+
+    private net.dv8tion.jda.api.entities.MessageEmbed buildVoiceInfoEmbed(long guildId, LocalDate date,
+                                                                         VoiceInfoPeriod period,
+                                                                         int limit, ZoneId zone) {
+        var range = rangeFor(date, period, zone);
+        boolean includeActive = isRangeIncludingNow(range, zone);
+        var rows = leaderboard.getTopForRange(guildId, range.start(), range.end(), limit, includeActive);
+        var nowMap = tracking.snapshotNow(guildId);
+        var description = VoiceBoardFormatter.formatRows(rows, nowMap);
+
+        String title = switch (period) {
+            case DAY -> "🎧 Voice статистика за " + date;
+            case WEEK -> "🎧 Voice статистика за неделю " + range.startDate() + " — " + range.endDate();
+            case MONTH -> "🎧 Voice статистика за " + date.getYear() + "-" + String.format("%02d", date.getMonthValue());
+        };
+
+        return new net.dv8tion.jda.api.EmbedBuilder()
+                .setTitle(title)
+                .setDescription(description.isEmpty()
+                        ? emptyMessageFor(period, date, range)
+                        : description)
+                .setFooter("обновлено: " + Instant.now().atZone(zone).toLocalTime().withNano(0))
+                .build();
+    }
+
+    private List<Button> buildVoiceInfoButtons(LocalDate date, LocalDate today,
+                                               VoiceInfoPeriod period, long ownerId) {
+        var prevDate = switch (period) {
+            case DAY -> date.minusDays(1);
+            case WEEK -> date.minusWeeks(1);
+            case MONTH -> date.minusMonths(1);
+        };
+        var nextDate = switch (period) {
+            case DAY -> date.plusDays(1);
+            case WEEK -> date.plusWeeks(1);
+            case MONTH -> date.plusMonths(1);
+        };
+
+        var prev = Button.primary(voiceInfoPayload(ownerId, period, prevDate), "⬅️ Назад");
+        var next = Button.primary(voiceInfoPayload(ownerId, period, nextDate), "Вперёд ➡️");
+        var toggle = buildToggleButton(ownerId, period, date);
+
+        if (nextDate.isAfter(today)) {
+            next = next.asDisabled();
+        }
+
+        return List.of(prev, toggle, next);
+    }
+
+    private Button buildToggleButton(long ownerId, VoiceInfoPeriod period, LocalDate date) {
+        if (period == VoiceInfoPeriod.MONTH) {
+            return Button.secondary(
+                    voiceInfoPayload(ownerId, VoiceInfoPeriod.WEEK, date),
+                    "Неделя"
+            );
+        }
+        if (period == VoiceInfoPeriod.WEEK) {
+            return Button.secondary(
+                    voiceInfoPayload(ownerId, VoiceInfoPeriod.MONTH, date),
+                    "Месяц"
+            );
+        }
+        return Button.secondary(
+                voiceInfoPayload(ownerId, VoiceInfoPeriod.WEEK, date),
+                "Неделя"
+        );
+    }
+
+    private String voiceInfoPayload(long ownerId, VoiceInfoPeriod period, LocalDate date) {
+        return VOICE_INFO_BUTTON_PREFIX + ownerId + ":" + period + ":" + date;
+    }
+
+    private VoiceInfoRange rangeFor(LocalDate date, VoiceInfoPeriod period, ZoneId zone) {
+        return switch (period) {
+            case DAY -> {
+                LocalDate start = date;
+                LocalDate end = date.plusDays(1);
+                yield new VoiceInfoRange(start, end.minusDays(1),
+                        start.atStartOfDay(zone).toInstant(),
+                        end.atStartOfDay(zone).toInstant());
+            }
+            case WEEK -> {
+                LocalDate start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                LocalDate end = start.plusWeeks(1);
+                yield new VoiceInfoRange(start, end.minusDays(1),
+                        start.atStartOfDay(zone).toInstant(),
+                        end.atStartOfDay(zone).toInstant());
+            }
+            case MONTH -> {
+                LocalDate start = date.withDayOfMonth(1);
+                LocalDate end = start.plusMonths(1);
+                yield new VoiceInfoRange(start, end.minusDays(1),
+                        start.atStartOfDay(zone).toInstant(),
+                        end.atStartOfDay(zone).toInstant());
+            }
+        };
+    }
+
+    private boolean isRangeIncludingNow(VoiceInfoRange range, ZoneId zone) {
+        LocalDate today = LocalDate.now(zone);
+        return !today.isBefore(range.startDate()) && !today.isAfter(range.endDate());
+    }
+
+    private String emptyMessageFor(VoiceInfoPeriod period, LocalDate date, VoiceInfoRange range) {
+        return switch (period) {
+            case DAY -> "Пока нет данных за " + date + ".";
+            case WEEK -> "Пока нет данных за неделю " + range.startDate() + " — " + range.endDate() + ".";
+            case MONTH -> "Пока нет данных за " + date.getYear() + "-" + String.format("%02d", date.getMonthValue()) + ".";
+        };
+    }
+
+    private record VoiceInfoRange(LocalDate startDate, LocalDate endDate, Instant start, Instant end) {}
 
     private VoiceTrackingService.VoiceFlags flags(Member member) {
         var vs = member.getVoiceState();
