@@ -28,6 +28,7 @@ public class GameMissionService {
     private final MissionChoiceRepository choiceRepository;
     private final GameNarratorService narratorService;
     private final GameRecapService recapService;
+    private final GameRewardService rewardService;
     private final GameProperties gameProperties;
     private final ObjectMapper objectMapper;
 
@@ -36,6 +37,7 @@ public class GameMissionService {
                               MissionChoiceRepository choiceRepository,
                               GameNarratorService narratorService,
                               GameRecapService recapService,
+                              GameRewardService rewardService,
                               GameProperties gameProperties,
                               ObjectMapper objectMapper) {
         this.missionRepository = missionRepository;
@@ -43,6 +45,7 @@ public class GameMissionService {
         this.choiceRepository = choiceRepository;
         this.narratorService = narratorService;
         this.recapService = recapService;
+        this.rewardService = rewardService;
         this.gameProperties = gameProperties;
         this.objectMapper = objectMapper;
     }
@@ -117,8 +120,13 @@ public class GameMissionService {
             mission.setStatus(failure ? MissionStatus.FAILURE : MissionStatus.SUCCESS);
             missionRepository.save(mission);
             logOutcome(mission);
+            int rewardCoins = 0;
+            if (!failure) {
+                rewardCoins = gameProperties.rewardCoins();
+                rewardService.grantCoins(mission.getGuildId(), mission.getUserId(), rewardCoins);
+            }
             String recap = buildRecap(mission);
-            return new MissionStepResult(mission, null, true, recap);
+            return new MissionStepResult(mission, null, true, recap, rewardCoins);
         }
 
         List<String> memoryFacts = readList(mission.getMemoryFactsJson());
@@ -129,7 +137,7 @@ public class GameMissionService {
         mission.setUpdatedAt(Instant.now());
         missionRepository.save(mission);
 
-        return new MissionStepResult(mission, response, false, null);
+        return new MissionStepResult(mission, response, false, null, 0);
     }
 
     private void logNarrator(GameMission mission, NarratorResponse response) {

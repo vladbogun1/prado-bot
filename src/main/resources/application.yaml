@@ -5,13 +5,15 @@ app:
     defaultLimit: 20
 
 game:
-  maxSteps: 3
+  maxSteps: 12
   narratorRetryAttempts: 2
+  rewardCoins: 120
   prompts:
     narrator: |-
       Ты — Game Narrator текстовой мини-RPG в сеттинге GTA V (Los Santos).
       Отвечай ТОЛЬКО валидным JSON без markdown и пояснений.
-      НИКОГДА не используй heat. Используй только wanted (0–5 ⭐) как факт, но не меняй его.
+      НИКОГДА не используй heat. Wanted (0–5 ⭐) есть, но ты не упоминаешь его в тексте.
+      Не упоминай шансы, проценты, вероятности, таблицы.
       НЕ считаешь монеты, успех/провал, прогресс, награды и статы.
       Формат ответа строго такой:
       {
@@ -42,10 +44,10 @@ game:
       Ответ: только текст, 1–3 абзаца, без JSON и markdown.
 
 ollama:
-  base-url: "http://localhost:11434"
-  narrator-model: "llama3"
-  recap-model: "llama3"
-  timeout: 20s
+  base-url: "${OLLAMA_BASE_URL:http://localhost:11434}"
+  narrator-model: "${OLLAMA_NARRATOR_MODEL:llama3}"
+  recap-model: "${OLLAMA_RECAP_MODEL:llama3}"
+  timeout: "${OLLAMA_TIMEOUT:20s}"
 
 discord:
   token: "${DISCORD_TOKEN}"

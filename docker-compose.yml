@@ -30,6 +30,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_started
     environment:
       TZ: Europe/Moscow
 
@@ -42,7 +44,22 @@ services:
       DB_USER: ${DB_USER:-bot}
       DB_PASSWORD: ${DB_PASSWORD:-botpass}
 
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_NARRATOR_MODEL: ${OLLAMA_NARRATOR_MODEL:-llama3}
+      OLLAMA_RECAP_MODEL: ${OLLAMA_RECAP_MODEL:-llama3}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-20s}
+
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75}
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: prado-bot-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
 volumes:
   mysql_data:
+  ollama_data:

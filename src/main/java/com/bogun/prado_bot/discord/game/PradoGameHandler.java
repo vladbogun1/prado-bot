@@ -45,7 +45,7 @@ public class PradoGameHandler {
         );
 
         NarratorResponse response = startResult.response();
-        String content = formatScene(response, 0, 1);
+        String content = formatScene(response, 1);
         List<Button> buttons = buildButtons(response, startResult.mission().getId());
         e.reply(content).setComponents(ActionRow.of(buttons)).setEphemeral(true).queue();
         return true;
@@ -75,13 +75,13 @@ public class PradoGameHandler {
             MissionStepResult result = missionService.applyChoice(missionId, e.getUser().getIdLong(), choiceId);
             if (result.completed()) {
                 String finishText = result.mission().getStatus().name().equals("SUCCESS")
-                        ? "Миссия завершена. Отчёт улетел в общий чат."
-                        : "Миссия провалена. Отчёт улетел в общий чат.";
+                        ? "Миссия завершена. Монеты зачислены: " + result.coinsAwarded() + ". Отчёт улетел в общий чат."
+                        : "Миссия провалена. Монеты не зачислены. Отчёт улетел в общий чат.";
                 e.editMessage(finishText).setComponents().queue();
                 e.getChannel().sendMessage(result.recap()).queue();
             } else {
                 var mission = result.mission();
-                String content = formatScene(result.response(), mission.getWanted(), mission.getStepIndex() + 1);
+                String content = formatScene(result.response(), mission.getStepIndex() + 1);
                 List<Button> buttons = buildButtons(result.response(), mission.getId());
                 e.editMessage(content).setComponents(ActionRow.of(buttons)).queue();
             }
@@ -97,12 +97,11 @@ public class PradoGameHandler {
                 .toList();
     }
 
-    private String formatScene(NarratorResponse response, int wanted, int stepNumber) {
+    private String formatScene(NarratorResponse response, int stepNumber) {
         StringBuilder builder = new StringBuilder();
         builder.append(response.scene().title()).append("\n")
                 .append(response.scene().text()).append("\n")
                 .append("Локация: ").append(response.scene().locationLine()).append("\n")
-                .append("Wanted: ").append(wanted).append(" ⭐").append("\n")
                 .append("Шаг ").append(stepNumber);
 
         if (response.choices() != null && !response.choices().isEmpty()) {
