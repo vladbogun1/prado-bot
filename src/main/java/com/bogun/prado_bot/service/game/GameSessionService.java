@@ -106,6 +106,10 @@ public class GameSessionService {
 
         upsertUser(guildId, userId, username, memberName);
 
+        if (missionTypeRepository.count() == 0 || locationRepository.count() == 0) {
+            return new GameView(null, List.of(), "Игровой контент ещё не загружен. Проверь миграцию данных.", false, null, null);
+        }
+
         GameMissionType missionType = pickRandom(missionTypeRepository.findAll(), seed(userId));
         GameLocation location = pickRandom(locationRepository.findAll(), seed(userId + 7));
 

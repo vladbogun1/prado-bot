@@ -25,7 +25,6 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
-import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -71,10 +70,12 @@ public class DiscordRouterListener implements EventListener {
                             .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
                     Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням"),
                     Commands.slash(PRADO_GAME_COMMAND, "Запустить мини-игру Prado Job")
-                            .addSubcommands(
-                                    new SubcommandData("start", "Начать миссию"),
-                                    new SubcommandData("status", "Показать статус"),
-                                    new SubcommandData("quit", "Завершить миссию")
+                            .addOption(OptionType.STRING, "mode", "start/status/quit", false,
+                                    option -> option.addChoices(
+                                            new net.dv8tion.jda.api.interactions.commands.Command.Choice("start", "start"),
+                                            new net.dv8tion.jda.api.interactions.commands.Command.Choice("status", "status"),
+                                            new net.dv8tion.jda.api.interactions.commands.Command.Choice("quit", "quit")
+                                    )
                             )
             ).queue();
             initialVoicesScan(e);
@@ -363,8 +364,7 @@ public class DiscordRouterListener implements EventListener {
             e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
             return;
         }
-        String sub = e.getSubcommandName();
-        if (sub == null) sub = "start";
+        String mode = e.getOption("mode") != null ? e.getOption("mode").getAsString() : "start";
 
         var member = e.getMember();
         if (member == null) {
@@ -378,7 +378,7 @@ public class DiscordRouterListener implements EventListener {
         String username = e.getUser().getName();
         String memberName = member.getEffectiveName();
 
-        GameSessionService.GameView view = switch (sub) {
+        GameSessionService.GameView view = switch (mode) {
             case "quit" -> gameSessionService.quitActiveSession(guildId, userId);
             case "status" -> gameSessionService.status(guildId, userId);
             default -> gameSessionService.startSession(guildId, userId, channelId, username, memberName);
