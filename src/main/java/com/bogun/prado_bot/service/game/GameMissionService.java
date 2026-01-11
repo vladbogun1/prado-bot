@@ -70,7 +70,8 @@ public class GameMissionService {
 
         List<String> memoryFacts = new ArrayList<>();
         List<String> memoryNpcs = new ArrayList<>();
-        NarratorResponse response = narratorService.nextScene(mission, memoryFacts, memoryNpcs, null);
+        String history = buildHistory(mission.getId(), mission.getStepIndex());
+        NarratorResponse response = narratorService.nextScene(mission, memoryFacts, memoryNpcs, null, history);
         updateMemory(mission, memoryFacts, memoryNpcs, response);
         logNarrator(mission, response);
         mission.setUpdatedAt(Instant.now());
@@ -131,7 +132,8 @@ public class GameMissionService {
 
         List<String> memoryFacts = readList(mission.getMemoryFactsJson());
         List<String> memoryNpcs = readList(mission.getMemoryNpcsJson());
-        NarratorResponse response = narratorService.nextScene(mission, memoryFacts, memoryNpcs, missionChoice);
+        String history = buildHistory(mission.getId(), mission.getStepIndex());
+        NarratorResponse response = narratorService.nextScene(mission, memoryFacts, memoryNpcs, missionChoice, history);
         updateMemory(mission, memoryFacts, memoryNpcs, response);
         logNarrator(mission, response);
         mission.setUpdatedAt(Instant.now());
@@ -169,6 +171,31 @@ public class GameMissionService {
         log.setContent("Outcome: " + mission.getStatus() + ", wanted: " + mission.getWanted() + "⭐");
         log.setCreatedAt(Instant.now());
         logRepository.save(log);
+    }
+
+    private String buildHistory(long missionId, int currentStep) {
+        List<GameMissionLog> logs = logRepository.findByMissionIdOrderByStepIndexAscIdAsc(missionId);
+        StringBuilder builder = new StringBuilder();
+        for (GameMissionLog log : logs) {
+            if (log.getStepIndex() > currentStep) {
+                break;
+            }
+            if ("NARRATOR_JSON".equals(log.getRole())) {
+                try {
+                    NarratorResponse response = objectMapper.readValue(log.getContent(), NarratorResponse.class);
+                    builder.append("- ").append(response.scene().title()).append(": ")
+                            .append(response.scene().text()).append("\n");
+                } catch (JsonProcessingException ignored) {
+                    builder.append("- Сцена (не удалось прочитать)\n");
+                }
+            } else if ("CHOICE".equals(log.getRole())) {
+                builder.append("- ").append(log.getContent()).append("\n");
+            }
+        }
+        if (builder.isEmpty()) {
+            return "История начинается сейчас.";
+        }
+        return builder.toString().trim();
     }
 
     private String buildRecap(GameMission mission) {

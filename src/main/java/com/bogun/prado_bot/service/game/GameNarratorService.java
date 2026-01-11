@@ -39,8 +39,8 @@ public class GameNarratorService {
     }
 
     public NarratorResponse nextScene(GameMission mission, List<String> memoryFacts, List<String> memoryNpcs,
-                                      MissionChoice previousChoice) {
-        String prompt = buildPrompt(mission, memoryFacts, memoryNpcs, previousChoice);
+                                      MissionChoice previousChoice, String history) {
+        String prompt = buildPrompt(mission, memoryFacts, memoryNpcs, previousChoice, history);
 
         int attempts = Math.max(1, gameProperties.narratorRetryAttempts());
         for (int i = 0; i < attempts; i++) {
@@ -59,11 +59,12 @@ public class GameNarratorService {
     }
 
     private String buildPrompt(GameMission mission, List<String> memoryFacts, List<String> memoryNpcs,
-                               MissionChoice previousChoice) {
+                               MissionChoice previousChoice, String history) {
         Map<String, Object> context = new HashMap<>();
         context.put("timestamp", Instant.now().toString());
         context.put("wanted", mission.getWanted());
         context.put("step_index", mission.getStepIndex());
+        context.put("step_total", gameProperties.maxSteps());
         context.put("memory_facts", memoryFacts);
         context.put("memory_npcs", memoryNpcs);
         if (previousChoice != null) {
@@ -81,7 +82,12 @@ public class GameNarratorService {
             contextJson = "{\"wanted\":" + mission.getWanted() + "}";
         }
 
-        return gameProperties.prompts().narrator() + "\n\nКонтекст:\n" + contextJson + "\n\nОтвет:";
+        String stageHint = stageHint(mission.getStepIndex(), gameProperties.maxSteps());
+        return gameProperties.prompts().narrator()
+                + "\n\nКонтекст:\n" + contextJson
+                + "\n\nИстория (кратко):\n" + history
+                + "\n\nЭтап миссии:\n" + stageHint
+                + "\n\nОтвет:";
     }
 
     private boolean isValid(NarratorResponse response) {
@@ -124,5 +130,22 @@ public class GameNarratorService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String stageHint(int stepIndex, int maxSteps) {
+        if (maxSteps <= 1) {
+            return "Финал: быстрый исход и завершение миссии.";
+        }
+        int current = stepIndex + 1;
+        if (current <= Math.max(2, maxSteps / 4)) {
+            return "Завязка: представь угрозу и цель, не закрывай конфликт.";
+        }
+        if (current < maxSteps - 2) {
+            return "Развитие: усиливай ставки и последствия, веди к развязке.";
+        }
+        if (current == maxSteps - 1) {
+            return "Предфинал: дай решающее препятствие и подведи к выбору перед концом.";
+        }
+        return "Финал: логическое завершение миссии и явный исход.";
     }
 }
