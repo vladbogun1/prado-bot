@@ -5,7 +5,11 @@ import com.bogun.prado_bot.service.VoiceBoardService;
 import com.bogun.prado_bot.service.VoiceLeaderboardService;
 import com.bogun.prado_bot.service.VoiceTrackingService;
 import lombok.RequiredArgsConstructor;
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.GenericEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceDeafenEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceGuildDeafenEvent;
@@ -19,7 +23,6 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.EventListener;
-import net.dv8tion.jda.api.interactions.components.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import org.springframework.beans.factory.annotation.Value;
@@ -227,7 +230,7 @@ public class DiscordRouterListener implements EventListener {
         var embed = buildVoiceInfoEmbed(e.getGuild().getIdLong(), today, 20, zone);
         var buttons = buildVoiceInfoButtons(today, today, e.getUser().getIdLong());
 
-        e.replyEmbeds(embed).addActionRow(buttons).setEphemeral(true).queue();
+        e.replyEmbeds(embed).setComponents(ActionRow.of(buttons)).setEphemeral(true).queue();
     }
 
     private void onButton(ButtonInteractionEvent e) {
@@ -264,16 +267,16 @@ public class DiscordRouterListener implements EventListener {
         var embed = buildVoiceInfoEmbed(e.getGuild().getIdLong(), date, 20, zone);
         var buttons = buildVoiceInfoButtons(date, today, ownerId);
 
-        e.editMessageEmbeds(embed).setActionRow(buttons).queue();
+        e.editMessageEmbeds(embed).setComponents(ActionRow.of(buttons)).queue();
     }
 
-    private net.dv8tion.jda.api.entities.MessageEmbed buildVoiceInfoEmbed(long guildId, LocalDate date,
+    private MessageEmbed buildVoiceInfoEmbed(long guildId, LocalDate date,
                                                                          int limit, ZoneId zone) {
         var rows = leaderboard.getTopForDate(guildId, date, limit);
         var nowMap = tracking.snapshotNow(guildId);
         var description = VoiceBoardFormatter.formatRows(rows, nowMap);
 
-        return new net.dv8tion.jda.api.EmbedBuilder()
+        return new EmbedBuilder()
                 .setTitle("🎧 Voice статистика за " + date)
                 .setDescription(description.isEmpty()
                         ? "Пока нет данных за " + date + "."
