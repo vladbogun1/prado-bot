@@ -28,7 +28,7 @@ jobs:
       - name: Build & push image
         env:
           SHA_TAG: ${{ github.sha }}
-          IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/tg-shop-miniapp
+          IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/prado-bot
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             RELEASE_TAG=${GITHUB_REF##*/}
