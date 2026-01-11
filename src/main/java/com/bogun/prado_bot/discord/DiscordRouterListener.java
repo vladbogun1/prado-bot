@@ -353,7 +353,7 @@ public class DiscordRouterListener implements EventListener {
         if (view.ended() && view.publicSummary() != null && view.publicChannelId() != null) {
             var channel = e.getJDA().getTextChannelById(view.publicChannelId());
             if (channel != null) {
-                channel.sendMessage(\"<@\" + e.getUser().getId() + \"> завершил миссию.\\n\" + view.publicSummary()).queue();
+                channel.sendMessage("<@" + e.getUser().getId() + "> завершил миссию.\n" + view.publicSummary()).queue();
             }
         }
     }
