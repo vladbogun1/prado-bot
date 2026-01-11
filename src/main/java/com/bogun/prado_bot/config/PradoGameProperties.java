@@ -14,6 +14,7 @@ public class PradoGameProperties {
     private boolean ephemeral = true;
     private long voiceBonusSeconds = 1800;
     private double voiceSuccessBonus = 0.05;
+    private long expireCheckMs = 60000;
 
     public int getCooldownMinutes() {
         return cooldownMinutes;
@@ -69,5 +70,13 @@ public class PradoGameProperties {
 
     public void setVoiceSuccessBonus(double voiceSuccessBonus) {
         this.voiceSuccessBonus = voiceSuccessBonus;
+    }
+
+    public long getExpireCheckMs() {
+        return expireCheckMs;
+    }
+
+    public void setExpireCheckMs(long expireCheckMs) {
+        this.expireCheckMs = expireCheckMs;
     }
 }

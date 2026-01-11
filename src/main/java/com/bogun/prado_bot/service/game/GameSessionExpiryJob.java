@@ -15,7 +15,7 @@ public class GameSessionExpiryJob {
 
     private final GameSessionRepository sessionRepository;
 
-    @Scheduled(fixedDelayString = "${app.prado-game.expire-check-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.prado-game.expire-check-ms}")
     @Transactional
     public void expireSessions() {
         Instant now = Instant.now();
