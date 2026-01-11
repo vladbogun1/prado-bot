@@ -37,6 +37,9 @@ public class GameEvent {
     @Column(name = "mission_type_key", length = 32)
     private String missionTypeKey;
 
+    @Column(name = "node_key", length = 40)
+    private String nodeKey;
+
     @Column(name = "min_progress", nullable = false)
     private int minProgress;
 
@@ -48,6 +51,17 @@ public class GameEvent {
 
     @Column(name = "max_heat", nullable = false)
     private int maxHeat;
+
+    @Column(name = "event_kind", nullable = false, length = 20)
+    private String eventKind;
+
+    @Lob
+    @Column(name = "trigger_action_types_json", nullable = false)
+    private String triggerActionTypesJson;
+
+    @Lob
+    @Column(name = "trigger_action_keys_json", nullable = false)
+    private String triggerActionKeysJson;
 
     @Lob
     @Column(name = "requirements_json", nullable = false)

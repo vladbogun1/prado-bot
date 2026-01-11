@@ -15,35 +15,30 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "game_scene")
-public class GameScene {
+@Table(name = "game_node")
+public class GameNode {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "node_key", nullable = false, length = 40, unique = true)
+    private String key;
+
     @Column(name = "mission_type_key", nullable = false, length = 32)
     private String missionTypeKey;
 
-    @Column(name = "location_key", nullable = false, length = 32)
-    private String locationKey;
-
-    @Column(name = "node_key", length = 40)
-    private String nodeKey;
-
-    @Column(name = "min_progress", nullable = false)
-    private int minProgress;
-
-    @Column(name = "max_progress", nullable = false)
-    private int maxProgress;
-
-    @Column(name = "min_heat", nullable = false)
-    private int minHeat;
-
-    @Column(name = "max_heat", nullable = false)
-    private int maxHeat;
+    @Column(name = "title", nullable = false, length = 120)
+    private String title;
 
     @Lob
-    @Column(name = "scene_text", nullable = false)
-    private String sceneText;
+    @Column(name = "description", nullable = false)
+    private String description;
+
+    @Column(name = "is_start", nullable = false)
+    private boolean start;
+
+    @Lob
+    @Column(name = "tags_json", nullable = false)
+    private String tagsJson;
 }

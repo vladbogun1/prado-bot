@@ -45,11 +45,17 @@ public class GameSession {
     @Column(name = "location_key", nullable = false, length = 32)
     private String locationKey;
 
+    @Column(name = "node_key", nullable = false, length = 40)
+    private String nodeKey;
+
     @Column(name = "progress", nullable = false)
     private int progress;
 
     @Column(name = "heat", nullable = false)
     private int heat;
+
+    @Column(name = "tail_level", nullable = false)
+    private int tailLevel;
 
     @Column(name = "step", nullable = false)
     private int step;
@@ -60,6 +66,14 @@ public class GameSession {
     @Lob
     @Column(name = "stats_json", nullable = false)
     private String statsJson;
+
+    @Lob
+    @Column(name = "flags_json", nullable = false)
+    private String flagsJson;
+
+    @Lob
+    @Column(name = "checkpoints_json", nullable = false)
+    private String checkpointsJson;
 
     @Lob
     @Column(name = "inventory_json", nullable = false)
@@ -75,6 +89,9 @@ public class GameSession {
 
     @Column(name = "last_delta_coins", nullable = false)
     private int lastDeltaCoins;
+
+    @Column(name = "earned_temp", nullable = false)
+    private int earnedTemp;
 
     @Lob
     @Column(name = "available_actions_json", nullable = false)

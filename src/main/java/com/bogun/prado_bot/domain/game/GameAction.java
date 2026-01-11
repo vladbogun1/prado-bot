@@ -34,6 +34,9 @@ public class GameAction {
     @Column(name = "mission_type_key", length = 32)
     private String missionTypeKey;
 
+    @Column(name = "node_key", length = 40)
+    private String nodeKey;
+
     @Column(name = "min_progress", nullable = false)
     private int minProgress;
 
@@ -61,6 +64,10 @@ public class GameAction {
     @Lob
     @Column(name = "requirements_json", nullable = false)
     private String requirementsJson;
+
+    @Lob
+    @Column(name = "trigger_events_json", nullable = false)
+    private String triggerEventsJson;
 
     @Lob
     @Column(name = "success_effects_json", nullable = false)

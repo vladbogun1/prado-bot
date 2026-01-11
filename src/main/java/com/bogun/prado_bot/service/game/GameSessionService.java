@@ -10,6 +10,7 @@ import com.bogun.prado_bot.domain.game.GameEventLog;
 import com.bogun.prado_bot.domain.game.GameItem;
 import com.bogun.prado_bot.domain.game.GameLocation;
 import com.bogun.prado_bot.domain.game.GameMissionType;
+import com.bogun.prado_bot.domain.game.GameNodeTransition;
 import com.bogun.prado_bot.domain.game.GameScene;
 import com.bogun.prado_bot.domain.game.GameSession;
 import com.bogun.prado_bot.domain.game.GameSessionStatus;
@@ -22,6 +23,8 @@ import com.bogun.prado_bot.repo.game.GameEventRepository;
 import com.bogun.prado_bot.repo.game.GameItemRepository;
 import com.bogun.prado_bot.repo.game.GameLocationRepository;
 import com.bogun.prado_bot.repo.game.GameMissionTypeRepository;
+import com.bogun.prado_bot.repo.game.GameNodeRepository;
+import com.bogun.prado_bot.repo.game.GameNodeTransitionRepository;
 import com.bogun.prado_bot.repo.game.GameSceneRepository;
 import com.bogun.prado_bot.repo.game.GameSessionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -76,6 +79,8 @@ public class GameSessionService {
     private final GameItemRepository itemRepository;
     private final GameCooldownRepository cooldownRepository;
     private final GameEventLogRepository eventLogRepository;
+    private final GameNodeRepository nodeRepository;
+    private final GameNodeTransitionRepository nodeTransitionRepository;
     private final VoiceUserRepository voiceUserRepository;
     private final VoiceSessionRepository voiceSessionRepository;
 
@@ -106,12 +111,16 @@ public class GameSessionService {
 
         upsertUser(guildId, userId, username, memberName);
 
-        if (missionTypeRepository.count() == 0 || locationRepository.count() == 0) {
+        if (missionTypeRepository.count() == 0 || locationRepository.count() == 0 || nodeRepository.count() == 0) {
             return new GameView(null, List.of(), "Игровой контент ещё не загружен. Проверь миграцию данных.", false, null, null);
         }
 
         GameMissionType missionType = pickRandom(missionTypeRepository.findAll(), seed(userId));
         GameLocation location = pickRandom(locationRepository.findAll(), seed(userId + 7));
+        String nodeKey = nodeRepository.findFirstByMissionTypeKeyAndStartIsTrue(missionType.getKey())
+                .orElseGet(() -> nodeRepository.findAllByMissionTypeKey(missionType.getKey()).stream().findFirst()
+                        .orElseThrow(() -> new IllegalStateException("content missing")))
+                .getKey();
 
         Map<String, Integer> stats = new HashMap<>();
         Random rng = new Random(seed(userId));
@@ -120,6 +129,8 @@ public class GameSessionService {
         stats.put("talk", 2 + rng.nextInt(4));
 
         Map<String, Integer> inventory = new HashMap<>();
+        List<String> flags = new ArrayList<>();
+        List<String> checkpoints = new ArrayList<>();
 
         GameSession session = new GameSession();
         session.setGuildId(guildId);
@@ -128,16 +139,21 @@ public class GameSessionService {
         session.setStatus(GameSessionStatus.ACTIVE);
         session.setMissionTypeKey(missionType.getKey());
         session.setLocationKey(location.getKey());
+        session.setNodeKey(nodeKey);
         session.setProgress(0);
         session.setHeat(0);
+        session.setTailLevel(0);
         session.setStep(1);
         session.setRngSeed(seed(userId));
         session.setStatsJson(writeJson(stats));
+        session.setFlagsJson(writeJson(flags));
+        session.setCheckpointsJson(writeJson(checkpoints));
         session.setInventoryJson(writeJson(inventory));
-        session.setLastSceneText(sceneTextFor(missionType.getKey(), location.getKey(), 0, 0, rng));
+        session.setLastSceneText(sceneTextFor(missionType.getKey(), location.getKey(), nodeKey, 0, 0, rng));
         session.setLastOutcomeText("Ты в игре. Первый ход — твой.");
         session.setLastDeltaCoins(0);
-        List<String> actions = chooseActions(session, stats, inventory, rng);
+        session.setEarnedTemp(0);
+        List<String> actions = chooseActions(session, stats, inventory, flags, checkpoints, rng);
         session.setAvailableActionsJson(writeJson(actions));
         session.setVersion(1);
         session.setCreatedAt(now);
@@ -212,12 +228,14 @@ public class GameSessionService {
 
         Map<String, Integer> stats = readMap(session.getStatsJson());
         Map<String, Integer> inventory = readMap(session.getInventoryJson());
+        List<String> flags = readList(session.getFlagsJson());
+        List<String> checkpoints = readList(session.getCheckpointsJson());
         List<String> available = readList(session.getAvailableActionsJson());
 
         if ("inspect".equals(actionKey)) {
             Random rng = new Random(session.getRngSeed() + session.getStep());
             session.setLastSceneText(sceneTextFor(session.getMissionTypeKey(), session.getLocationKey(),
-                    session.getProgress(), session.getHeat(), rng));
+                    session.getNodeKey(), session.getProgress(), session.getHeat(), rng));
             session.setLastOutcomeText("Ты осмотрелся и нашёл свежие детали.");
             session.setLastDeltaCoins(0);
             session.setVersion(session.getVersion() + 1);
@@ -259,29 +277,34 @@ public class GameSessionService {
         double successChance = successChance(session, action, stats, inventory, rng);
         boolean success = rng.nextDouble() < successChance;
 
-        EffectDelta actionDelta = applyEffects(success ? action.getSuccessEffectsJson() : action.getFailEffectsJson(), inventory, rng);
+        EffectDelta actionDelta = applyEffects(success ? action.getSuccessEffectsJson() : action.getFailEffectsJson(),
+                inventory, flags, checkpoints, rng);
         int heatDelta = actionDelta.deltaHeat() + action.getRisk();
         int progressDelta = actionDelta.deltaProgress();
 
         consumeRequiredItems(action.getRequirementsJson(), inventory);
 
-        Optional<GameEvent> randomEvent = pickEvent(session, stats, inventory, rng);
-        EffectDelta eventDelta = randomEvent.map(event -> applyEffects(event.getEffectsJson(), inventory, rng))
+        Optional<GameEvent> randomEvent = pickEvent(session, action, stats, inventory, flags, checkpoints, rng);
+        EffectDelta eventDelta = randomEvent.map(event -> applyEffects(event.getEffectsJson(), inventory, flags, checkpoints, rng))
                 .orElse(EffectDelta.empty());
 
         int totalCoinsDelta = actionDelta.deltaCoins() + eventDelta.deltaCoins();
         int totalHeatDelta = heatDelta + eventDelta.deltaHeat();
         int totalProgressDelta = progressDelta + eventDelta.deltaProgress();
 
-        int coinsApplied = applyCoinsDelta(session.getGuildId(), session.getUserId(), totalCoinsDelta, now);
+        int tempDelta = totalCoinsDelta;
 
         int currentStep = session.getStep();
         session.setProgress(clamp(session.getProgress() + totalProgressDelta, 0, 100));
         session.setHeat(clamp(session.getHeat() + totalHeatDelta, 0, 100));
         session.setInventoryJson(writeJson(inventory));
-        session.setLastDeltaCoins(coinsApplied);
+        session.setFlagsJson(writeJson(flags));
+        session.setCheckpointsJson(writeJson(checkpoints));
+        session.setTailLevel(clamp(session.getTailLevel() + actionDelta.deltaTail() + eventDelta.deltaTail(), 0, 3));
+        session.setEarnedTemp(session.getEarnedTemp() + tempDelta);
+        session.setLastDeltaCoins(tempDelta);
 
-        String outcome = buildOutcome(action, success, coinsApplied, totalHeatDelta, totalProgressDelta, randomEvent);
+        String outcome = buildOutcome(action, success, tempDelta, totalHeatDelta, totalProgressDelta, randomEvent);
         session.setLastOutcomeText(outcome);
 
         session.setStep(currentStep + 1);
@@ -294,12 +317,20 @@ public class GameSessionService {
             session.setStatus(terminal);
         }
 
+        String nodeFrom = session.getNodeKey();
+        String nodeTo = pickNextNode(session, stats, inventory, flags, checkpoints, rng);
+        if (nodeTo != null) {
+            session.setNodeKey(nodeTo);
+        }
+
         GameEventLog log = new GameEventLog();
         log.setSessionId(session.getId());
         log.setStep(currentStep);
         log.setActionKey(action.getKey());
+        log.setNodeFromKey(nodeFrom);
+        log.setNodeToKey(session.getNodeKey());
         log.setSuccess(success);
-        log.setDeltaCoins(coinsApplied);
+        log.setDeltaCoins(tempDelta);
         log.setDeltaHeat(totalHeatDelta);
         log.setDeltaProgress(totalProgressDelta);
         log.setEventKeysJson(writeJson(randomEvent.map(GameEvent::getKey).map(List::of).orElseGet(List::of)));
@@ -308,20 +339,21 @@ public class GameSessionService {
         eventLogRepository.save(log);
 
         if (session.getStatus() == GameSessionStatus.ACTIVE) {
-            List<String> actions = chooseActions(session, stats, inventory, rng);
+            List<String> actions = chooseActions(session, stats, inventory, flags, checkpoints, rng);
             session.setAvailableActionsJson(writeJson(actions));
             session.setLastSceneText(sceneTextFor(session.getMissionTypeKey(), session.getLocationKey(),
-                    session.getProgress(), session.getHeat(), rng));
+                    session.getNodeKey(), session.getProgress(), session.getHeat(), rng));
         }
 
         sessionRepository.save(session);
 
         if (session.getStatus() != GameSessionStatus.ACTIVE) {
+            int payout = payoutEarnings(session, now);
             updateCooldown(session.getGuildId(), session.getUserId(), now);
-            return withPublicSummary(render(session, null, coinsApplied), buildSummary(session));
+            return withPublicSummary(render(session, null, payout), buildSummary(session));
         }
 
-        return render(session, null, coinsApplied);
+        return render(session, null, tempDelta);
     }
 
     public GameView render(GameSession session, String message, int deltaCoins) {
@@ -329,6 +361,9 @@ public class GameSessionService {
                 .orElseThrow(() -> new IllegalStateException("Mission type not found"));
         GameLocation location = locationRepository.findByKey(session.getLocationKey())
                 .orElseThrow(() -> new IllegalStateException("Location not found"));
+        String nodeTitle = nodeRepository.findByKey(session.getNodeKey())
+                .map(node -> node.getTitle())
+                .orElse("Ситуация");
 
         Map<String, Integer> stats = readMap(session.getStatsJson());
         Map<String, Integer> inventory = readMap(session.getInventoryJson());
@@ -345,10 +380,13 @@ public class GameSessionService {
                 .setDescription(description)
                 .addField("📍 Локация", location.getName(), true)
                 .addField("🎯 Цель", missionType.getObjective(), true)
+                .addField("🧭 Узел", nodeTitle, true)
                 .addField("🔥 Heat", heatLabel(session.getHeat()), true)
+                .addField("🧨 Хвост", String.valueOf(session.getTailLevel()), true)
                 .addField("📈 Прогресс", "Ход " + session.getStep() + "/" + properties.getMaxSteps(), true)
                 .addField("🎒 Инвентарь", inventoryLabel(inventory), false)
-                .addField("💰 Баланс", coins + formatDelta(deltaCoins != 0 ? deltaCoins : session.getLastDeltaCoins()), false);
+                .addField("💰 Баланс", coins + formatDelta(deltaCoins != 0 ? deltaCoins : session.getLastDeltaCoins()), false)
+                .addField("🧾 Накоплено", String.valueOf(session.getEarnedTemp()), false);
 
         if (message != null) {
             embed.setFooter(message);
@@ -384,8 +422,8 @@ public class GameSessionService {
         return BUTTON_PREFIX + session.getId() + ":" + actionKey + ":" + session.getVersion();
     }
 
-    private String sceneTextFor(String missionTypeKey, String locationKey, int progress, int heat, Random rng) {
-        List<GameScene> scenes = sceneRepository.findAllByMissionTypeKeyAndLocationKey(missionTypeKey, locationKey);
+    private String sceneTextFor(String missionTypeKey, String locationKey, String nodeKey, int progress, int heat, Random rng) {
+        List<GameScene> scenes = sceneRepository.findAllForContext(missionTypeKey, locationKey, nodeKey);
         List<GameScene> filtered = scenes.stream()
                 .filter(scene -> progress >= scene.getMinProgress() && progress <= scene.getMaxProgress())
                 .filter(scene -> heat >= scene.getMinHeat() && heat <= scene.getMaxHeat())
@@ -397,12 +435,13 @@ public class GameSessionService {
     }
 
     private List<String> chooseActions(GameSession session, Map<String, Integer> stats,
-                                       Map<String, Integer> inventory, Random rng) {
-        List<GameAction> actions = actionRepository.findAllByMissionTypeKeyIsNullOrMissionTypeKey(session.getMissionTypeKey());
+                                       Map<String, Integer> inventory, List<String> flags,
+                                       List<String> checkpoints, Random rng) {
+        List<GameAction> actions = actionRepository.findAllForContext(session.getMissionTypeKey(), session.getNodeKey());
         List<GameAction> filtered = actions.stream()
                 .filter(action -> session.getProgress() >= action.getMinProgress() && session.getProgress() <= action.getMaxProgress())
                 .filter(action -> session.getHeat() >= action.getMinHeat() && session.getHeat() <= action.getMaxHeat())
-                .filter(action -> meetsRequirements(action.getRequirementsJson(), stats, inventory))
+                .filter(action -> meetsRequirements(action.getRequirementsJson(), stats, inventory, flags, checkpoints, session.getTailLevel()))
                 .toList();
 
         if (filtered.isEmpty()) {
@@ -417,7 +456,8 @@ public class GameSessionService {
                 .toList();
     }
 
-    private boolean meetsRequirements(String json, Map<String, Integer> stats, Map<String, Integer> inventory) {
+    private boolean meetsRequirements(String json, Map<String, Integer> stats, Map<String, Integer> inventory,
+                                      List<String> flags, List<String> checkpoints, int tailLevel) {
         if (json == null || json.isBlank()) return true;
         JsonNode node = readJson(json);
         if (node == null || node.isNull()) return true;
@@ -445,16 +485,73 @@ public class GameSessionService {
             }
         }
 
+        JsonNode requiredFlags = node.get("requiredFlags");
+        if (requiredFlags != null && requiredFlags.isArray()) {
+            for (JsonNode flag : requiredFlags) {
+                if (!flags.contains(flag.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode missingFlags = node.get("missingFlags");
+        if (missingFlags != null && missingFlags.isArray()) {
+            for (JsonNode flag : missingFlags) {
+                if (flags.contains(flag.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode requiredCheckpoints = node.get("requiredCheckpoints");
+        if (requiredCheckpoints != null && requiredCheckpoints.isArray()) {
+            for (JsonNode checkpoint : requiredCheckpoints) {
+                if (!checkpoints.contains(checkpoint.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode missingCheckpoints = node.get("missingCheckpoints");
+        if (missingCheckpoints != null && missingCheckpoints.isArray()) {
+            for (JsonNode checkpoint : missingCheckpoints) {
+                if (checkpoints.contains(checkpoint.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        int minTail = node.has("minTail") ? node.get("minTail").asInt() : Integer.MIN_VALUE;
+        int maxTail = node.has("maxTail") ? node.get("maxTail").asInt() : Integer.MAX_VALUE;
+        if (tailLevel < minTail || tailLevel > maxTail) {
+            return false;
+        }
+
         return true;
     }
 
-    private Optional<GameEvent> pickEvent(GameSession session, Map<String, Integer> stats,
-                                         Map<String, Integer> inventory, Random rng) {
-        List<GameEvent> events = eventRepository.findAllByMissionTypeKeyIsNullOrMissionTypeKey(session.getMissionTypeKey());
+    private Optional<GameEvent> pickEvent(GameSession session, GameAction action, Map<String, Integer> stats,
+                                          Map<String, Integer> inventory, List<String> flags,
+                                          List<String> checkpoints, Random rng) {
+        List<GameEvent> events = eventRepository.findAllForContext(session.getMissionTypeKey(), session.getNodeKey());
+
+        Optional<GameEvent> reaction = pickEventByKind(events, "REACTION", session, action, stats, inventory, flags, checkpoints, rng);
+        if (reaction.isPresent()) {
+            return reaction;
+        }
+
+        return pickEventByKind(events, "AMBIENT", session, action, stats, inventory, flags, checkpoints, rng);
+    }
+
+    private Optional<GameEvent> pickEventByKind(List<GameEvent> events, String kind, GameSession session, GameAction action,
+                                                Map<String, Integer> stats, Map<String, Integer> inventory,
+                                                List<String> flags, List<String> checkpoints, Random rng) {
         List<GameEvent> filtered = events.stream()
+                .filter(event -> kind.equalsIgnoreCase(eventKind(event)))
                 .filter(event -> session.getProgress() >= event.getMinProgress() && session.getProgress() <= event.getMaxProgress())
                 .filter(event -> session.getHeat() >= event.getMinHeat() && session.getHeat() <= event.getMaxHeat())
-                .filter(event -> meetsRequirements(event.getRequirementsJson(), stats, inventory))
+                .filter(event -> matchesTrigger(event, action))
+                .filter(event -> meetsRequirements(event.getRequirementsJson(), stats, inventory, flags, checkpoints, session.getTailLevel()))
                 .filter(event -> rng.nextDouble() < event.getBaseChance())
                 .toList();
 
@@ -472,6 +569,100 @@ public class GameSessionService {
             }
         }
         return Optional.of(filtered.get(0));
+    }
+
+    private boolean matchesTrigger(GameEvent event, GameAction action) {
+        if (action == null) return true;
+        List<String> actionTypes = readList(event.getTriggerActionTypesJson());
+        List<String> actionKeys = readList(event.getTriggerActionKeysJson());
+        boolean typeMatch = actionTypes.isEmpty() || actionTypes.contains(action.getType());
+        boolean keyMatch = actionKeys.isEmpty() || actionKeys.contains(action.getKey());
+        return typeMatch && keyMatch;
+    }
+
+    private String eventKind(GameEvent event) {
+        if (event.getEventKind() == null || event.getEventKind().isBlank()) {
+            return "AMBIENT";
+        }
+        return event.getEventKind();
+    }
+
+    private String pickNextNode(GameSession session, Map<String, Integer> stats, Map<String, Integer> inventory,
+                                List<String> flags, List<String> checkpoints, Random rng) {
+        List<GameNodeTransition> transitions = nodeTransitionRepository.findAllByFromNodeKey(session.getNodeKey());
+        List<GameNodeTransition> filtered = transitions.stream()
+                .filter(transition -> meetsTransitionConditions(transition.getConditionJson(), session, stats, inventory, flags, checkpoints))
+                .toList();
+        if (filtered.isEmpty()) {
+            return null;
+        }
+        int totalWeight = filtered.stream().mapToInt(GameNodeTransition::getWeight).sum();
+        int roll = rng.nextInt(totalWeight);
+        int acc = 0;
+        for (GameNodeTransition transition : filtered) {
+            acc += transition.getWeight();
+            if (roll < acc) {
+                return transition.getToNodeKey();
+            }
+        }
+        return filtered.get(0).getToNodeKey();
+    }
+
+    private boolean meetsTransitionConditions(String json, GameSession session, Map<String, Integer> stats,
+                                              Map<String, Integer> inventory, List<String> flags,
+                                              List<String> checkpoints) {
+        if (json == null || json.isBlank()) return true;
+        JsonNode node = readJson(json);
+        if (node == null || node.isNull()) return true;
+
+        int minHeat = node.has("minHeat") ? node.get("minHeat").asInt() : Integer.MIN_VALUE;
+        int maxHeat = node.has("maxHeat") ? node.get("maxHeat").asInt() : Integer.MAX_VALUE;
+        int minProgress = node.has("minProgress") ? node.get("minProgress").asInt() : Integer.MIN_VALUE;
+        int maxProgress = node.has("maxProgress") ? node.get("maxProgress").asInt() : Integer.MAX_VALUE;
+        int minTail = node.has("minTail") ? node.get("minTail").asInt() : Integer.MIN_VALUE;
+        int maxTail = node.has("maxTail") ? node.get("maxTail").asInt() : Integer.MAX_VALUE;
+
+        if (session.getHeat() < minHeat || session.getHeat() > maxHeat) return false;
+        if (session.getProgress() < minProgress || session.getProgress() > maxProgress) return false;
+        if (session.getTailLevel() < minTail || session.getTailLevel() > maxTail) return false;
+
+        JsonNode requiredFlags = node.get("requiredFlags");
+        if (requiredFlags != null && requiredFlags.isArray()) {
+            for (JsonNode flag : requiredFlags) {
+                if (!flags.contains(flag.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode missingFlags = node.get("missingFlags");
+        if (missingFlags != null && missingFlags.isArray()) {
+            for (JsonNode flag : missingFlags) {
+                if (flags.contains(flag.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode requiredCheckpoints = node.get("requiredCheckpoints");
+        if (requiredCheckpoints != null && requiredCheckpoints.isArray()) {
+            for (JsonNode checkpoint : requiredCheckpoints) {
+                if (!checkpoints.contains(checkpoint.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        JsonNode missingCheckpoints = node.get("missingCheckpoints");
+        if (missingCheckpoints != null && missingCheckpoints.isArray()) {
+            for (JsonNode checkpoint : missingCheckpoints) {
+                if (checkpoints.contains(checkpoint.asText())) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private double successChance(GameSession session, GameAction action,
@@ -509,7 +700,8 @@ public class GameSessionService {
         return seconds >= properties.getVoiceBonusSeconds() ? properties.getVoiceSuccessBonus() : 0.0;
     }
 
-    private EffectDelta applyEffects(String json, Map<String, Integer> inventory, Random rng) {
+    private EffectDelta applyEffects(String json, Map<String, Integer> inventory, List<String> flags,
+                                     List<String> checkpoints, Random rng) {
         if (json == null || json.isBlank()) return EffectDelta.empty();
         JsonNode node = readJson(json);
         if (node == null || node.isNull()) return EffectDelta.empty();
@@ -517,6 +709,7 @@ public class GameSessionService {
         int deltaCoins = readDelta(node.get("deltaCoins"), rng);
         int deltaHeat = readDelta(node.get("deltaHeat"), rng);
         int deltaProgress = readDelta(node.get("deltaProgress"), rng);
+        int deltaTail = readDelta(node.get("deltaTail"), rng);
 
         JsonNode addItems = node.get("addItem");
         if (addItems != null) {
@@ -527,7 +720,34 @@ public class GameSessionService {
             applyItems(removeItems, inventory, -1);
         }
 
-        return new EffectDelta(deltaCoins, deltaHeat, deltaProgress);
+        applyFlags(node.get("setFlag"), flags, true);
+        applyFlags(node.get("clearFlag"), flags, false);
+        applyFlags(node.get("addCheckpoint"), checkpoints, true);
+        applyFlags(node.get("removeCheckpoint"), checkpoints, false);
+
+        return new EffectDelta(deltaCoins, deltaHeat, deltaProgress, deltaTail);
+    }
+
+    private void applyFlags(JsonNode node, List<String> target, boolean add) {
+        if (node == null) return;
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                applyFlag(target, item.asText(), add);
+            }
+        } else {
+            applyFlag(target, node.asText(), add);
+        }
+    }
+
+    private void applyFlag(List<String> target, String value, boolean add) {
+        if (value == null || value.isBlank()) return;
+        if (add) {
+            if (!target.contains(value)) {
+                target.add(value);
+            }
+        } else {
+            target.remove(value);
+        }
     }
 
     private void applyItems(JsonNode node, Map<String, Integer> inventory, int delta) {
@@ -615,6 +835,29 @@ public class GameSessionService {
         return appliedDelta;
     }
 
+    private int payoutEarnings(GameSession session, Instant now) {
+        int payout = computePayout(session);
+        int applied = applyCoinsDelta(session.getGuildId(), session.getUserId(), payout, now);
+        session.setLastDeltaCoins(applied);
+        sessionRepository.save(session);
+        return applied;
+    }
+
+    private int computePayout(GameSession session) {
+        int earned = session.getEarnedTemp();
+        if (earned <= 0) return 0;
+        if (session.getStatus() == GameSessionStatus.SUCCESS) {
+            return earned;
+        }
+        if (session.getStatus() == GameSessionStatus.FAIL) {
+            return session.getHeat() >= 70 ? Math.max(0, (int) Math.floor(earned * 0.2)) : Math.max(0, (int) Math.floor(earned * 0.5));
+        }
+        if (session.getStatus() == GameSessionStatus.QUIT) {
+            return Math.max(0, (int) Math.floor(earned * 0.5));
+        }
+        return Math.max(0, (int) Math.floor(earned * 0.3));
+    }
+
     private void updateCooldown(long guildId, long userId, Instant now) {
         GameCooldown cooldown = cooldownRepository.findByGuildIdAndUserId(guildId, userId)
                 .orElseGet(() -> createCooldown(guildId, userId, now));
@@ -668,11 +911,11 @@ public class GameSessionService {
         GameLocation location = locationRepository.findByKey(session.getLocationKey())
                 .orElseThrow(() -> new IllegalStateException("Location not found"));
         List<GameEventLog> logs = eventLogRepository.findAllBySessionIdOrderByStepAsc(session.getId());
-        int totalCoins = logs.stream().mapToInt(GameEventLog::getDeltaCoins).sum();
-
         String header = "Итог миссии: " + missionType.getName() + " в " + location.getName();
         String status = "Результат: " + statusLabel(session.getStatus());
-        String coins = "Монеты: " + (totalCoins >= 0 ? "+" : "") + totalCoins;
+        int earned = session.getEarnedTemp();
+        int payout = computePayout(session);
+        String coins = "Монеты: +" + payout + " (накоплено " + earned + ")";
 
         String story = logs.stream()
                 .limit(6)
@@ -780,9 +1023,9 @@ public class GameSessionService {
         return Math.max(min, Math.min(max, value));
     }
 
-    private record EffectDelta(int deltaCoins, int deltaHeat, int deltaProgress) {
+    private record EffectDelta(int deltaCoins, int deltaHeat, int deltaProgress, int deltaTail) {
         static EffectDelta empty() {
-            return new EffectDelta(0, 0, 0);
+            return new EffectDelta(0, 0, 0, 0);
         }
     }
 

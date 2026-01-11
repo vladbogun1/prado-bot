@@ -33,6 +33,12 @@ public class GameEventLog {
     @Column(name = "action_key", nullable = false, length = 40)
     private String actionKey;
 
+    @Column(name = "node_from_key", length = 40)
+    private String nodeFromKey;
+
+    @Column(name = "node_to_key", length = 40)
+    private String nodeToKey;
+
     @Column(name = "success", nullable = false)
     private boolean success;
 
