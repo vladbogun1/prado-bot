@@ -142,6 +142,47 @@ public class VoiceTrackingService {
                 });
     }
 
+    @Transactional
+    public void closeActiveSessionsBefore(Long guildId, Instant boundary) {
+        sessionRepo.findAllByGuildIdAndEndedAtIsNull(guildId).forEach(s -> {
+            if (s.getStartedAt().isBefore(boundary)) {
+                closeSession(s, boundary);
+            }
+        });
+    }
+
+    @Transactional
+    public void ensureSessionAtBoundary(Long guildId, Long userId, String username, String memberName,
+                                        Long voiceId, String voiceName, VoiceFlags flags, Instant boundary) {
+        upsertUser(guildId, userId, username, memberName);
+
+        sessionRepo.findFirstByGuildIdAndUserIdAndEndedAtIsNullOrderByStartedAtDesc(guildId, userId)
+                .ifPresentOrElse(s -> {
+                    if (s.getStartedAt().isBefore(boundary)) {
+                        closeSession(s, boundary);
+                        createSessionAtBoundary(guildId, userId, voiceId, voiceName, flags, boundary);
+                    }
+                }, () -> createSessionAtBoundary(guildId, userId, voiceId, voiceName, flags, boundary));
+    }
+
+    private void createSessionAtBoundary(Long guildId, Long userId, Long voiceId, String voiceName,
+                                         VoiceFlags flags, Instant boundary) {
+        VoiceSession s = new VoiceSession();
+        s.setGuildId(guildId);
+        s.setUserId(userId);
+        s.setStartedAt(boundary);
+        s.setEndedAt(null);
+        s.setActiveSeconds(0);
+        s.setMuted(flags.muted());
+        s.setDeafened(flags.deafened());
+        s.setSuppressed(flags.suppressed());
+        s.setPaused(flags.paused());
+        s.setLastStateAt(boundary);
+        s.setVoiceChannelId(voiceId);
+        s.setVoiceChannelName(voiceName);
+        sessionRepo.save(s);
+    }
+
     private void closeSession(VoiceSession s, Instant endAt) {
         flushActiveSeconds(s, endAt);
         s.setEndedAt(endAt);
