@@ -45,5 +45,27 @@ public class VoiceUser {
 
         @Column(name = "user_id", nullable = false)
         private Long userId;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            VoiceUserId that = (VoiceUserId) o;
+            if (guildId != null ? !guildId.equals(that.guildId) : that.guildId != null) {
+                return false;
+            }
+            return userId != null ? userId.equals(that.userId) : that.userId == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = guildId != null ? guildId.hashCode() : 0;
+            result = 31 * result + (userId != null ? userId.hashCode() : 0);
+            return result;
+        }
     }
 }
