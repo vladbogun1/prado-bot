@@ -1,9 +1,9 @@
 ALTER TABLE game_session
-    ADD COLUMN node_key VARCHAR(40) NOT NULL DEFAULT '',
-    ADD COLUMN tail_level INT NOT NULL DEFAULT 0,
-    ADD COLUMN flags_json TEXT NULL,
-    ADD COLUMN checkpoints_json TEXT NULL,
-    ADD COLUMN earned_temp INT NOT NULL DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS node_key VARCHAR(40) NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS tail_level INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS flags_json TEXT NULL,
+    ADD COLUMN IF NOT EXISTS checkpoints_json TEXT NULL,
+    ADD COLUMN IF NOT EXISTS earned_temp INT NOT NULL DEFAULT 0;
 
 UPDATE game_session
 SET flags_json = '[]'
@@ -18,23 +18,42 @@ ALTER TABLE game_session
     MODIFY checkpoints_json TEXT NOT NULL;
 
 ALTER TABLE game_scene
-    ADD COLUMN node_key VARCHAR(40) NULL;
+    ADD COLUMN IF NOT EXISTS node_key VARCHAR(40) NULL;
 
 ALTER TABLE game_action
-    ADD COLUMN node_key VARCHAR(40) NULL,
-    ADD COLUMN trigger_events_json TEXT NOT NULL DEFAULT '[]';
+    ADD COLUMN IF NOT EXISTS node_key VARCHAR(40) NULL,
+    ADD COLUMN IF NOT EXISTS trigger_events_json TEXT NULL;
+
+UPDATE game_action
+SET trigger_events_json = '[]'
+WHERE trigger_events_json IS NULL;
+
+ALTER TABLE game_action
+    MODIFY trigger_events_json TEXT NOT NULL;
 
 ALTER TABLE game_event
-    ADD COLUMN node_key VARCHAR(40) NULL,
-    ADD COLUMN event_kind VARCHAR(20) NOT NULL DEFAULT 'AMBIENT',
-    ADD COLUMN trigger_action_types_json TEXT NOT NULL DEFAULT '[]',
-    ADD COLUMN trigger_action_keys_json TEXT NOT NULL DEFAULT '[]';
+    ADD COLUMN IF NOT EXISTS node_key VARCHAR(40) NULL,
+    ADD COLUMN IF NOT EXISTS event_kind VARCHAR(20) NOT NULL DEFAULT 'AMBIENT',
+    ADD COLUMN IF NOT EXISTS trigger_action_types_json TEXT NULL,
+    ADD COLUMN IF NOT EXISTS trigger_action_keys_json TEXT NULL;
+
+UPDATE game_event
+SET trigger_action_types_json = '[]'
+WHERE trigger_action_types_json IS NULL;
+
+UPDATE game_event
+SET trigger_action_keys_json = '[]'
+WHERE trigger_action_keys_json IS NULL;
+
+ALTER TABLE game_event
+    MODIFY trigger_action_types_json TEXT NOT NULL,
+    MODIFY trigger_action_keys_json TEXT NOT NULL;
 
 ALTER TABLE game_event_log
-    ADD COLUMN node_from_key VARCHAR(40) NULL,
-    ADD COLUMN node_to_key VARCHAR(40) NULL;
+    ADD COLUMN IF NOT EXISTS node_from_key VARCHAR(40) NULL,
+    ADD COLUMN IF NOT EXISTS node_to_key VARCHAR(40) NULL;
 
-CREATE TABLE game_node (
+CREATE TABLE IF NOT EXISTS game_node (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     node_key VARCHAR(40) NOT NULL UNIQUE,
     mission_type_key VARCHAR(32) NOT NULL,
@@ -44,7 +63,7 @@ CREATE TABLE game_node (
     tags_json TEXT NOT NULL
 );
 
-CREATE TABLE game_node_transition (
+CREATE TABLE IF NOT EXISTS game_node_transition (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     from_node_key VARCHAR(40) NOT NULL,
     to_node_key VARCHAR(40) NOT NULL,
@@ -52,10 +71,10 @@ CREATE TABLE game_node_transition (
     condition_json TEXT NOT NULL
 );
 
-CREATE INDEX ix_game_node_mission ON game_node (mission_type_key, is_start);
-CREATE INDEX ix_game_node_transition_from ON game_node_transition (from_node_key);
+CREATE INDEX IF NOT EXISTS ix_game_node_mission ON game_node (mission_type_key, is_start);
+CREATE INDEX IF NOT EXISTS ix_game_node_transition_from ON game_node_transition (from_node_key);
 
-INSERT INTO game_node (node_key, mission_type_key, title, description, is_start, tags_json) VALUES
+INSERT IGNORE INTO game_node (node_key, mission_type_key, title, description, is_start, tags_json) VALUES
 ('DELIVERY_PICKUP', 'DELIVERY', 'Забрать груз', 'Точка забора, груз готов. Нужно стартовать без шума.', TRUE, '["start"]'),
 ('DELIVERY_TRANSIT', 'DELIVERY', 'В пути', 'Город шумит, копы рядом. Главное — не привлекать внимание.', FALSE, '["mid"]'),
 ('DELIVERY_HANDOFF', 'DELIVERY', 'Передача', 'Покупатель на связи, пора передать груз.', FALSE, '["handoff"]'),
@@ -76,7 +95,7 @@ INSERT INTO game_node (node_key, mission_type_key, title, description, is_start,
 ('CHASE_BREAK', 'CHASE', 'Сбросить хвост', 'Есть шанс оторваться.', FALSE, '["break"]'),
 ('CHASE_SAFE', 'CHASE', 'Укрытие', 'Безопасная зона близко.', FALSE, '["safe"]');
 
-INSERT INTO game_node_transition (from_node_key, to_node_key, weight, condition_json) VALUES
+INSERT IGNORE INTO game_node_transition (from_node_key, to_node_key, weight, condition_json) VALUES
 ('DELIVERY_PICKUP', 'DELIVERY_TRANSIT', 80, '{"minProgress":0,"maxProgress":60}'),
 ('DELIVERY_PICKUP', 'DELIVERY_ESCAPE', 20, '{"minHeat":50}'),
 ('DELIVERY_TRANSIT', 'DELIVERY_HANDOFF', 70, '{"minProgress":40}'),
