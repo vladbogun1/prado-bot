@@ -7,10 +7,17 @@ const state = {
   selectedNodeKey: null,
   drag: null,
   connectMode: null,
+  viewport: {
+    x: 0,
+    y: 0,
+    scale: 1,
+    pan: null,
+  },
 };
 
 const canvas = document.getElementById('canvas');
 const connections = document.getElementById('connections');
+const viewport = document.getElementById('viewport');
 const nodeList = document.getElementById('nodeList');
 const campaignSelect = document.getElementById('campaignSelect');
 const preview = document.getElementById('preview');
@@ -101,7 +108,7 @@ function renderNodeList() {
 }
 
 function renderNodes() {
-  canvas.querySelectorAll('.node').forEach(node => node.remove());
+  viewport.querySelectorAll('.node').forEach(node => node.remove());
   state.nodes.forEach(node => {
     const pos = state.positions[node.nodeKey];
     const el = document.createElement('div');
@@ -154,7 +161,7 @@ function renderNodes() {
       }
     };
 
-    canvas.appendChild(el);
+    viewport.appendChild(el);
   });
 }
 
@@ -200,6 +207,10 @@ function renderConnections() {
       drawEdge(choice.nodeKey, choice.failNodeKey, 'rgba(255, 107, 107, 0.75)', '6 6');
     }
   });
+}
+
+function updateViewportTransform() {
+  viewport.style.transform = `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.scale})`;
 }
 
 function applyAutoLayout() {
@@ -448,22 +459,56 @@ async function createChoice() {
   render();
 }
 
+canvas.addEventListener('pointerdown', (event) => {
+  if (event.button !== 1) return;
+  state.viewport.pan = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: state.viewport.x,
+    originY: state.viewport.y,
+  };
+  canvas.setPointerCapture(event.pointerId);
+});
+
 canvas.addEventListener('pointermove', (event) => {
+  if (state.viewport.pan) {
+    state.viewport.x = state.viewport.pan.originX + (event.clientX - state.viewport.pan.startX);
+    state.viewport.y = state.viewport.pan.originY + (event.clientY - state.viewport.pan.startY);
+    updateViewportTransform();
+    return;
+  }
   if (!state.drag) return;
   const pos = state.positions[state.drag.nodeKey];
-  pos.x = state.drag.originX + (event.clientX - state.drag.startX);
-  pos.y = state.drag.originY + (event.clientY - state.drag.startY);
+  pos.x = state.drag.originX + (event.clientX - state.drag.startX) / state.viewport.scale;
+  pos.y = state.drag.originY + (event.clientY - state.drag.startY) / state.viewport.scale;
   render();
 });
 
 canvas.addEventListener('pointerup', () => {
   state.drag = null;
+  state.viewport.pan = null;
   savePositions();
 });
 
 canvas.addEventListener('pointerleave', () => {
   state.drag = null;
+  state.viewport.pan = null;
 });
+
+canvas.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  const bounds = canvas.getBoundingClientRect();
+  const mouseX = event.clientX - bounds.left;
+  const mouseY = event.clientY - bounds.top;
+  const scaleDelta = event.deltaY < 0 ? 1.1 : 0.9;
+  const nextScale = Math.min(2, Math.max(0.4, state.viewport.scale * scaleDelta));
+  const worldX = (mouseX - state.viewport.x) / state.viewport.scale;
+  const worldY = (mouseY - state.viewport.y) / state.viewport.scale;
+  state.viewport.x = mouseX - worldX * nextScale;
+  state.viewport.y = mouseY - worldY * nextScale;
+  state.viewport.scale = nextScale;
+  updateViewportTransform();
+}, { passive: false });
 
 inspector.title.addEventListener('input', async () => {
   const node = state.nodes.find(n => n.nodeKey === state.selectedNodeKey);
@@ -542,4 +587,5 @@ document.getElementById('exportBtn').onclick = () => {
 (async function init() {
   await loadCampaigns();
   await loadGraph();
+  updateViewportTransform();
 })();

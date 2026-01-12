@@ -128,6 +128,12 @@ body {
   pointer-events: none;
 }
 
+.viewport {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
 .connections {
   position: absolute;
   inset: 0;
