@@ -27,10 +27,12 @@ public class StoryGameHandler {
             e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
             return true;
         }
-        String subcommand = e.getSubcommandName();
-        if (subcommand != null && !"start".equals(subcommand)) {
-            e.reply("Неизвестная команда.").setEphemeral(true).queue();
-            return true;
+        if (e.getOption("action") != null) {
+            String action = e.getOption("action").getAsString();
+            if (!"start".equalsIgnoreCase(action)) {
+                e.reply("Неизвестная команда.").setEphemeral(true).queue();
+                return true;
+            }
         }
         try {
             StoryRender render = engine.startOrResume(

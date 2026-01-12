@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import net.dv8tion.jda.api.EmbedBuilder;
-import net.dv8tion.jda.api.components.ActionRow;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.springframework.stereotype.Service;
@@ -36,18 +36,18 @@ public class StoryGameEngine {
     private static final TypeReference<List<Map<String, Object>>> EFFECT_LIST = new TypeReference<>() {};
 
     private final StoryRepository storyRepository;
-    private final StorySessionRepository sessionRepository;
+    private final StorySessionStore sessionStore;
     private final EconomyAdapter economyAdapter;
     private final StoryGameProperties properties;
     private final ObjectMapper mapper;
 
     public StoryGameEngine(StoryRepository storyRepository,
-                           StorySessionRepository sessionRepository,
+                           StorySessionStore sessionStore,
                            EconomyAdapter economyAdapter,
                            StoryGameProperties properties,
                            ObjectMapper mapper) {
         this.storyRepository = storyRepository;
-        this.sessionRepository = sessionRepository;
+        this.sessionStore = sessionStore;
         this.economyAdapter = economyAdapter;
         this.properties = properties;
         this.mapper = mapper;
@@ -58,17 +58,17 @@ public class StoryGameEngine {
         String campaignKey = properties.getDefaultCampaignKey();
         storyRepository.validateCampaign(campaignKey);
 
-        Optional<StorySession> existing = sessionRepository.findActiveSession(guildId, userId, campaignKey);
+        Optional<StorySession> existing = sessionStore.findActiveSession(guildId, userId, campaignKey);
         if (existing.isPresent()) {
             StorySession session = existing.get();
             if (Instant.now().isAfter(session.getExpiresAt())) {
-                sessionRepository.expireSession(session.getId());
+                sessionStore.expireSession(session.getId());
             } else {
                 return renderSession(session);
             }
         }
 
-        StoryCooldown cooldown = sessionRepository.findCooldown(guildId, userId, campaignKey)
+        StoryCooldown cooldown = sessionStore.findCooldown(guildId, userId, campaignKey)
                 .orElse(null);
         if (cooldown != null && cooldown.getLastFinishedAt() != null) {
             Duration since = Duration.between(cooldown.getLastFinishedAt(), Instant.now());
@@ -104,7 +104,7 @@ public class StoryGameEngine {
         session.setExpiresAt(now.plus(Duration.ofMinutes(properties.getSessionTtlMinutes())));
 
         applyAutoEffects(session, startNode, "start");
-        sessionRepository.createSession(session);
+        sessionStore.createSession(session);
 
         return renderSession(session);
     }
@@ -112,7 +112,7 @@ public class StoryGameEngine {
     @Transactional
     public StoryRender applyChoice(long sessionId, String choiceKey, int version,
                                    long actorUserId, String username, String memberName) {
-        StorySession session = sessionRepository.findSessionForUpdate(sessionId)
+        StorySession session = sessionStore.findSessionForUpdate(sessionId)
                 .orElseThrow(() -> new StoryGameException("Сессия не найдена."));
         if (session.getUserId() != actorUserId) {
             throw new StoryGameException("Эта сессия принадлежит другому игроку.");
@@ -121,7 +121,7 @@ public class StoryGameEngine {
             throw new StoryGameException("Сессия уже завершена.");
         }
         if (Instant.now().isAfter(session.getExpiresAt())) {
-            sessionRepository.expireSession(session.getId());
+            sessionStore.expireSession(session.getId());
             throw new StoryGameException("Сессия истекла. Запусти игру снова.");
         }
         if (session.getVersion() != version) {
@@ -169,8 +169,8 @@ public class StoryGameEngine {
         }
 
         String deltaJson = writeJson(buildDelta(applied, payout));
-        sessionRepository.insertLog(session.getId(), nextStep, currentNode.nodeKey(), choice.choiceKey(), success, deltaJson, outcomeText);
-        sessionRepository.updateSession(session);
+        sessionStore.insertLog(session.getId(), nextStep, currentNode.nodeKey(), choice.choiceKey(), success, deltaJson, outcomeText);
+        sessionStore.updateSession(session);
 
         return renderSession(session);
     }
@@ -388,7 +388,7 @@ public class StoryGameEngine {
 
     private int applyDailyCap(StorySession session, int payout, int capDaily) {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        StoryCooldown cooldown = sessionRepository.findCooldown(session.getGuildId(), session.getUserId(), session.getCampaignKey())
+        StoryCooldown cooldown = sessionStore.findCooldown(session.getGuildId(), session.getUserId(), session.getCampaignKey())
                 .orElseGet(() -> {
                     StoryCooldown cd = new StoryCooldown();
                     cd.setGuildId(session.getGuildId());
@@ -409,7 +409,7 @@ public class StoryGameEngine {
 
         cooldown.setDailyEarned(cooldown.getDailyEarned() + finalPayout);
         cooldown.setLastFinishedAt(Instant.now());
-        sessionRepository.upsertCooldown(cooldown);
+        sessionStore.upsertCooldown(cooldown);
         return finalPayout;
     }
 
