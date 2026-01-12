@@ -55,8 +55,16 @@ services:
     image: ollama/ollama:latest
     container_name: prado-bot-ollama
     restart: unless-stopped
+    environment:
+      OLLAMA_NARRATOR_MODEL: ${OLLAMA_NARRATOR_MODEL:-llama3}
+      OLLAMA_RECAP_MODEL: ${OLLAMA_RECAP_MODEL:-llama3}
     ports:
       - "11434:11434"
+    command: >
+      sh -c "ollama serve & sleep 2 &&
+      ollama pull ${OLLAMA_NARRATOR_MODEL:-llama3} &&
+      ollama pull ${OLLAMA_RECAP_MODEL:-llama3} &&
+      wait"
     volumes:
       - ollama_data:/root/.ollama
 

@@ -29,6 +29,11 @@ public class GameRecapService {
     }
 
     private String fallbackRecap(String missionLogText) {
-        return "Хроники Лос-Сантоса получились шумными. Вот сухой расклад:\n" + missionLogText;
+        String trimmed = missionLogText;
+        int limit = 1500;
+        if (trimmed.length() > limit) {
+            trimmed = trimmed.substring(0, limit) + "...";
+        }
+        return "Хроники Лос-Сантоса получились шумными. Вот сухой расклад:\n" + trimmed;
     }
 }

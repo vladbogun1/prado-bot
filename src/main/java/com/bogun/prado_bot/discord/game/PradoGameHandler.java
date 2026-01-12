@@ -78,7 +78,7 @@ public class PradoGameHandler {
                         ? "Миссия завершена. Монеты зачислены: " + result.coinsAwarded() + ". Отчёт улетел в общий чат."
                         : "Миссия провалена. Монеты не зачислены. Отчёт улетел в общий чат.";
                 e.editMessage(finishText).setComponents().queue();
-                e.getChannel().sendMessage(result.recap()).queue();
+                sendRecap(e.getChannel(), result.recap());
             } else {
                 var mission = result.mission();
                 String content = formatScene(result.response(), mission.getStepIndex() + 1);
@@ -114,6 +114,21 @@ public class PradoGameHandler {
             }
         }
         return builder.toString();
+    }
+
+    private void sendRecap(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel, String recap) {
+        if (recap == null || recap.isBlank()) {
+            channel.sendMessage("Итог миссии готов, но рассказ не удалось сформировать.").queue();
+            return;
+        }
+        int max = 1900;
+        int index = 0;
+        while (index < recap.length()) {
+            int end = Math.min(recap.length(), index + max);
+            String chunk = recap.substring(index, end);
+            channel.sendMessage(chunk).queue();
+            index = end;
+        }
     }
 
 }
