@@ -91,6 +91,35 @@ body {
   margin-bottom: 12px;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: 1px solid #2a3350;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 .node-list {
   display: flex;
   flex-direction: column;
@@ -265,6 +294,16 @@ button.ghost {
   cursor: pointer;
 }
 
+button.danger {
+  background: #2a1c23;
+  border: 1px solid #5a2632;
+  color: var(--danger);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .choice-card {
   border: 1px solid #263049;
   border-radius: 10px;
@@ -315,4 +354,15 @@ button.ghost {
   border-radius: 6px;
   border: 1px solid #2a3350;
   font-size: 12px;
+}
+
+.dev-json {
+  min-height: 260px;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
 }

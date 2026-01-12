@@ -1,6 +1,7 @@
 package com.bogun.prado_bot.story.editor;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -30,6 +31,11 @@ public class StoryEditorController {
         return service.loadGraph(campaignKey);
     }
 
+    @PostMapping("/{campaignKey}/graph")
+    public StoryGraphDto saveGraph(@PathVariable String campaignKey, @RequestBody StoryGraphDto graph) {
+        return service.replaceGraph(campaignKey, graph);
+    }
+
     @PostMapping("/{campaignKey}/nodes")
     public StoryNodeDto createNode(@PathVariable String campaignKey, @RequestBody StoryNodeDto node) {
         return service.createNode(campaignKey, node);
@@ -42,6 +48,11 @@ public class StoryEditorController {
         return service.updateNode(campaignKey, nodeKey, node);
     }
 
+    @DeleteMapping("/{campaignKey}/nodes/{nodeKey}")
+    public void deleteNode(@PathVariable String campaignKey, @PathVariable String nodeKey) {
+        service.deleteNode(campaignKey, nodeKey);
+    }
+
     @PostMapping("/{campaignKey}/choices")
     public StoryChoiceDto createChoice(@PathVariable String campaignKey, @RequestBody StoryChoiceDto choice) {
         return service.createChoice(campaignKey, choice);
@@ -52,5 +63,10 @@ public class StoryEditorController {
                                        @PathVariable String choiceKey,
                                        @RequestBody StoryChoiceDto choice) {
         return service.updateChoice(campaignKey, choiceKey, choice);
+    }
+
+    @DeleteMapping("/{campaignKey}/choices/{choiceKey}")
+    public void deleteChoice(@PathVariable String campaignKey, @PathVariable String choiceKey) {
+        service.deleteChoice(campaignKey, choiceKey);
     }
 }

@@ -21,6 +21,12 @@ const viewport = document.getElementById('viewport');
 const nodeList = document.getElementById('nodeList');
 const campaignSelect = document.getElementById('campaignSelect');
 const preview = document.getElementById('preview');
+const devJson = document.getElementById('devJson');
+const devReloadBtn = document.getElementById('devReloadBtn');
+const devSaveBtn = document.getElementById('devSaveBtn');
+const deleteNodeBtn = document.getElementById('deleteNodeBtn');
+const tabButtons = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-panel');
 const inspector = {
   title: document.getElementById('nodeTitle'),
   key: document.getElementById('nodeKey'),
@@ -281,6 +287,7 @@ function renderInspector() {
     inspector.auto.value = '';
     inspector.reward.value = '';
     inspector.choices.innerHTML = '<div class="badge">Выберите узел</div>';
+    deleteNodeBtn.disabled = true;
     return;
   }
   inspector.title.value = node.title;
@@ -289,6 +296,7 @@ function renderInspector() {
   inspector.terminal.value = node.terminalType;
   inspector.auto.value = node.autoEffectsJson || '';
   inspector.reward.value = node.rewardJson || '';
+  deleteNodeBtn.disabled = false;
 
   const choices = state.choices.filter(c => c.nodeKey === node.nodeKey);
   inspector.choices.innerHTML = '';
@@ -378,6 +386,46 @@ function renderPreview() {
     <div class="hud">❤️ 100 | 💵 $0 | 🚨 0 | 🪙 0</div>
     <div class="buttons">${choiceButtons}</div>
   `;
+}
+
+function updateDevJson() {
+  const payload = {
+    nodes: state.nodes,
+    choices: state.choices,
+  };
+  devJson.value = JSON.stringify(payload, null, 2);
+}
+
+async function saveDevJson() {
+  let payload;
+  try {
+    payload = JSON.parse(devJson.value || '{}');
+  } catch (error) {
+    alert('JSON невалидный. Проверьте синтаксис.');
+    return;
+  }
+  await api(`/api/story/${state.campaignKey}/graph`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  localStorage.removeItem(`story-pos-${state.campaignKey}`);
+  await loadGraph();
+}
+
+async function deleteSelectedNode() {
+  const node = state.nodes.find(n => n.nodeKey === state.selectedNodeKey);
+  if (!node) return;
+  const confirmed = window.confirm(`Удалить узел "${node.title}"? Удалятся только его выборы.`);
+  if (!confirmed) return;
+  try {
+    await api(`/api/story/${state.campaignKey}/nodes/${node.nodeKey}`, {
+      method: 'DELETE',
+    });
+    localStorage.removeItem(`story-pos-${state.campaignKey}`);
+    await loadGraph();
+  } catch (error) {
+    alert(error.message || 'Не удалось удалить узел.');
+  }
 }
 
 function selectNode(nodeKey) {
@@ -578,6 +626,20 @@ campaignSelect.addEventListener('change', async () => {
 document.getElementById('addNodeBtn').onclick = () => createNode();
 document.getElementById('addChoiceBtn').onclick = () => createChoice();
 document.getElementById('autoLayoutBtn').onclick = () => applyAutoLayout();
+deleteNodeBtn.onclick = () => deleteSelectedNode();
+devReloadBtn.onclick = () => updateDevJson();
+devSaveBtn.onclick = () => saveDevJson();
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabButtons.forEach(item => item.classList.remove('active'));
+    tabPanels.forEach(panel => panel.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab)?.classList.add('active');
+    if (btn.dataset.tab === 'devTab') {
+      updateDevJson();
+    }
+  });
+});
 
 document.getElementById('exportBtn').onclick = () => {
   navigator.clipboard.writeText(JSON.stringify({ nodes: state.nodes, choices: state.choices }, null, 2));

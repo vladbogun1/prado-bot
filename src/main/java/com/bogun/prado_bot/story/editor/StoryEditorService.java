@@ -3,6 +3,9 @@ package com.bogun.prado_bot.story.editor;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Map;
@@ -81,6 +84,26 @@ public class StoryEditorService {
                 .build();
     }
 
+    @Transactional
+    public StoryGraphDto replaceGraph(String campaignKey, StoryGraphDto graph) {
+        jdbc.update("DELETE FROM story_choice WHERE campaign_key = :campaignKey",
+                Map.of("campaignKey", campaignKey));
+        jdbc.update("DELETE FROM story_node WHERE campaign_key = :campaignKey",
+                Map.of("campaignKey", campaignKey));
+
+        if (graph.getNodes() != null) {
+            for (var node : graph.getNodes()) {
+                createNode(campaignKey, node);
+            }
+        }
+        if (graph.getChoices() != null) {
+            for (var choice : graph.getChoices()) {
+                createChoice(campaignKey, choice);
+            }
+        }
+        return loadGraph(campaignKey);
+    }
+
     public StoryNodeDto createNode(String campaignKey, StoryNodeDto node) {
         var sql = """
                 INSERT INTO story_node (campaign_key, node_key, title, variants_json, auto_effects_json,
@@ -126,6 +149,33 @@ public class StoryEditorService {
         node.setCampaignKey(campaignKey);
         node.setNodeKey(nodeKey);
         return node;
+    }
+
+    @Transactional
+    public void deleteNode(String campaignKey, String nodeKey) {
+        var incomingCount = jdbc.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM story_choice
+                        WHERE campaign_key = :campaignKey
+                          AND (success_node_key = :nodeKey OR fail_node_key = :nodeKey)
+                          AND node_key <> :nodeKey
+                        """,
+                Map.of("campaignKey", campaignKey, "nodeKey", nodeKey),
+                Integer.class);
+        if (incomingCount != null && incomingCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Нельзя удалить узел: на него ссылаются другие выборы.");
+        }
+        jdbc.update("""
+                        DELETE FROM story_choice
+                        WHERE campaign_key = :campaignKey AND node_key = :nodeKey
+                        """,
+                Map.of("campaignKey", campaignKey, "nodeKey", nodeKey));
+        jdbc.update("""
+                        DELETE FROM story_node
+                        WHERE campaign_key = :campaignKey AND node_key = :nodeKey
+                        """,
+                Map.of("campaignKey", campaignKey, "nodeKey", nodeKey));
     }
 
     public StoryChoiceDto createChoice(String campaignKey, StoryChoiceDto choice) {
@@ -190,5 +240,13 @@ public class StoryEditorService {
         choice.setCampaignKey(campaignKey);
         choice.setChoiceKey(choiceKey);
         return choice;
+    }
+
+    public void deleteChoice(String campaignKey, String choiceKey) {
+        jdbc.update("""
+                        DELETE FROM story_choice
+                        WHERE campaign_key = :campaignKey AND choice_key = :choiceKey
+                        """,
+                Map.of("campaignKey", campaignKey, "choiceKey", choiceKey));
     }
 }
