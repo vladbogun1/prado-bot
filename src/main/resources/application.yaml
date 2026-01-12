@@ -47,7 +47,7 @@ ollama:
   base-url: "${OLLAMA_BASE_URL:http://localhost:11434}"
   narrator-model: "${OLLAMA_NARRATOR_MODEL:llama3}"
   recap-model: "${OLLAMA_RECAP_MODEL:llama3}"
-  timeout: "${OLLAMA_TIMEOUT:20s}"
+  timeout: "${OLLAMA_TIMEOUT:60s}"
 
 discord:
   token: "${DISCORD_TOKEN}"

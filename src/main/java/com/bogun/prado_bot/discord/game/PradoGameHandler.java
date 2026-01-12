@@ -12,6 +12,8 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 @Component
 @RequiredArgsConstructor
@@ -38,16 +40,21 @@ public class PradoGameHandler {
             return true;
         }
 
-        MissionStartResult startResult = missionService.startMission(
-                e.getGuild().getIdLong(),
-                e.getChannel().getIdLong(),
-                e.getUser().getIdLong()
-        );
-
-        NarratorResponse response = startResult.response();
-        String content = formatScene(response, 1);
-        List<Button> buttons = buildButtons(response, startResult.mission().getId());
-        e.reply(content).setComponents(ActionRow.of(buttons)).setEphemeral(true).queue();
+        e.deferReply(true).queue(hook -> CompletableFuture.supplyAsync(() -> missionService.startMission(
+                        e.getGuild().getIdLong(),
+                        e.getChannel().getIdLong(),
+                        e.getUser().getIdLong()
+                ))
+                .thenAccept(startResult -> {
+                    NarratorResponse response = startResult.response();
+                    String content = formatScene(response, 1);
+                    List<Button> buttons = buildButtons(response, startResult.mission().getId());
+                    hook.editOriginal(content).setComponents(ActionRow.of(buttons)).queue();
+                })
+                .exceptionally(ex -> {
+                    hook.editOriginal("Не удалось начать миссию. Попробуй ещё раз.").setComponents().queue();
+                    return null;
+                }));
         return true;
     }
 
@@ -71,23 +78,34 @@ public class PradoGameHandler {
         }
 
         String choiceId = parts[1];
-        try {
-            MissionStepResult result = missionService.applyChoice(missionId, e.getUser().getIdLong(), choiceId);
-            if (result.completed()) {
-                String finishText = result.mission().getStatus().name().equals("SUCCESS")
-                        ? "Миссия завершена. Монеты зачислены: " + result.coinsAwarded() + ". Отчёт улетел в общий чат."
-                        : "Миссия провалена. Монеты не зачислены. Отчёт улетел в общий чат.";
-                e.editMessage(finishText).setComponents().queue();
-                sendRecap(e.getChannel(), result.recap());
-            } else {
-                var mission = result.mission();
-                String content = formatScene(result.response(), mission.getStepIndex() + 1);
-                List<Button> buttons = buildButtons(result.response(), mission.getId());
-                e.editMessage(content).setComponents(ActionRow.of(buttons)).queue();
-            }
-        } catch (IllegalStateException ex) {
-            e.reply("Ход не принят: " + ex.getMessage()).setEphemeral(true).queue();
-        }
+        e.deferEdit().queue(hook -> CompletableFuture.supplyAsync(() -> missionService.applyChoice(
+                        missionId,
+                        e.getUser().getIdLong(),
+                        choiceId
+                ))
+                .thenAccept(result -> {
+                    if (result.completed()) {
+                        String finishText = result.mission().getStatus().name().equals("SUCCESS")
+                                ? "Миссия завершена. Монеты зачислены: " + result.coinsAwarded() + ". Отчёт улетел в общий чат."
+                                : "Миссия провалена. Монеты не зачислены. Отчёт улетел в общий чат.";
+                        hook.editOriginal(finishText).setComponents().queue();
+                        sendRecap(e.getChannel(), result.recap());
+                    } else {
+                        var mission = result.mission();
+                        String content = formatScene(result.response(), mission.getStepIndex() + 1);
+                        List<Button> buttons = buildButtons(result.response(), mission.getId());
+                        hook.editOriginal(content).setComponents(ActionRow.of(buttons)).queue();
+                    }
+                })
+                .exceptionally(ex -> {
+                    String message = "Не удалось обработать ход. Попробуй ещё раз.";
+                    Throwable cause = ex instanceof CompletionException ? ex.getCause() : ex;
+                    if (cause instanceof IllegalStateException) {
+                        message = "Ход не принят: " + cause.getMessage();
+                    }
+                    hook.editOriginal(message).setComponents().queue();
+                    return null;
+                }));
         return true;
     }
 
