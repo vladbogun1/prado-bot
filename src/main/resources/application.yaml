@@ -27,3 +27,9 @@ spring:
 logging:
   level:
     org.flywaydb: DEBUG
+
+story:
+  game:
+    default-campaign-key: "BUM_TO_BOSS"
+    cooldown-minutes: 10
+    session-ttl-minutes: 30

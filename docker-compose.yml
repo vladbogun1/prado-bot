@@ -43,6 +43,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-botpass}
 
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75}
+    ports:
+      - "8088:8080"
 
 volumes:
   mysql_data:
