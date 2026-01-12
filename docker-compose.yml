@@ -64,14 +64,25 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
-  ollama-pull:
+  ollama-pull-narrator:
     image: ollama/ollama:latest
-    container_name: prado-bot-ollama-pull
+    container_name: prado-bot-ollama-pull-narrator
     restart: "no"
     depends_on:
       - ollama
-    entrypoint: ["/bin/sh", "-c"]
-    command: "ollama pull ${OLLAMA_NARRATOR_MODEL:-llama3} && ollama pull ${OLLAMA_RECAP_MODEL:-llama3}"
+    entrypoint: ["ollama"]
+    command: ["pull", "${OLLAMA_NARRATOR_MODEL:-llama3}"]
+    volumes:
+      - ollama_data:/root/.ollama
+
+  ollama-pull-recap:
+    image: ollama/ollama:latest
+    container_name: prado-bot-ollama-pull-recap
+    restart: "no"
+    depends_on:
+      - ollama
+    entrypoint: ["ollama"]
+    command: ["pull", "${OLLAMA_RECAP_MODEL:-llama3}"]
     volumes:
       - ollama_data:/root/.ollama
 
