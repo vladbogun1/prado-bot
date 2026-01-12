@@ -539,6 +539,21 @@
     },
     {
       "campaignKey": "BUM_TO_BOSS",
+      "nodeKey": "N2_SHELTER_RULES",
+      "choiceKey": "C9_RULES_STICK",
+      "label": "Сдержаться и играть по правилам",
+      "sortOrder": 1,
+      "conditionsJson": "{}",
+      "checkJson": "{\"type\":\"roll\",\"stat\":\"discipline\",\"base_success\":0.55,\"stat_scale\":0.05,\"wanted_scale\":0.001}",
+      "successNodeKey": "N3_TEMP_JOB",
+      "failNodeKey": "N2_SHELTER_RELAPSE",
+      "successText": "Ты принимаешь правила и цепляешься за шанс.",
+      "failText": "Ты срываешься в последнюю минуту.",
+      "successEffectsJson": "[{\"op\":\"stat.add\",\"key\":\"discipline\",\"value\":1}]",
+      "failEffectsJson": "[{\"op\":\"stat.add\",\"key\":\"hp\",\"value\":-3}]"
+    },
+    {
+      "campaignKey": "BUM_TO_BOSS",
       "nodeKey": "N2_SHELTER_LATE",
       "choiceKey": "C10_SLEEP_OUT",
       "label": "Переночевать на улице рядом",
