@@ -1,5 +1,6 @@
 const state = {
   campaignKey: null,
+  campaigns: [],
   nodes: [],
   choices: [],
   positions: {},
@@ -40,6 +41,7 @@ async function api(path, options = {}) {
 
 async function loadCampaigns() {
   const campaigns = await api('/api/story/campaigns');
+  state.campaigns = campaigns;
   campaignSelect.innerHTML = '';
   campaigns.forEach(c => {
     const option = document.createElement('option');
@@ -58,12 +60,16 @@ async function loadGraph() {
   const graph = await api(`/api/story/${state.campaignKey}/graph`);
   state.nodes = graph.nodes;
   state.choices = graph.choices;
-  state.positions = JSON.parse(localStorage.getItem(`story-pos-${state.campaignKey}`) || '{}');
+  const storedPositions = localStorage.getItem(`story-pos-${state.campaignKey}`);
+  state.positions = JSON.parse(storedPositions || '{}');
   state.nodes.forEach((node, index) => {
     if (!state.positions[node.nodeKey]) {
       state.positions[node.nodeKey] = { x: 160 + index * 40, y: 140 + index * 30 };
     }
   });
+  if (!storedPositions) {
+    applyAutoLayout();
+  }
   state.selectedNodeKey = state.nodes[0]?.nodeKey ?? null;
   render();
 }
@@ -100,6 +106,7 @@ function renderNodes() {
     const pos = state.positions[node.nodeKey];
     const el = document.createElement('div');
     el.className = 'node';
+    el.dataset.nodeKey = node.nodeKey;
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     if (node.nodeKey === state.selectedNodeKey) {
@@ -153,23 +160,104 @@ function renderNodes() {
 
 function renderConnections() {
   connections.innerHTML = '';
-  state.choices.forEach(choice => {
-    if (!choice.successNodeKey) return;
-    const source = state.positions[choice.nodeKey];
-    const target = state.positions[choice.successNodeKey];
+  const bounds = canvas.getBoundingClientRect();
+  const nodeWidth = 260;
+  const nodeHeight = 140;
+  const extents = Object.values(state.positions).reduce((acc, pos) => {
+    acc.maxX = Math.max(acc.maxX, pos.x + nodeWidth + 40);
+    acc.maxY = Math.max(acc.maxY, pos.y + nodeHeight + 40);
+    return acc;
+  }, { maxX: bounds.width, maxY: bounds.height });
+  const width = Math.max(bounds.width, extents.maxX);
+  const height = Math.max(bounds.height, extents.maxY);
+  connections.setAttribute('width', width);
+  connections.setAttribute('height', height);
+  connections.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const drawEdge = (sourceKey, targetKey, color, dash) => {
+    const source = state.positions[sourceKey];
+    const target = state.positions[targetKey];
     if (!source || !target) return;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const startX = source.x + 260;
-    const startY = source.y + 110;
+    const startX = source.x + nodeWidth;
+    const startY = source.y + nodeHeight / 2;
     const endX = target.x;
-    const endY = target.y + 60;
+    const endY = target.y + nodeHeight / 2;
     const midX = (startX + endX) / 2;
     path.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`);
-    path.setAttribute('stroke', 'rgba(111, 157, 255, 0.8)');
+    path.setAttribute('stroke', color);
     path.setAttribute('stroke-width', '2');
+    if (dash) {
+      path.setAttribute('stroke-dasharray', dash);
+    }
     path.setAttribute('fill', 'none');
     connections.appendChild(path);
+  };
+  state.choices.forEach(choice => {
+    if (choice.successNodeKey) {
+      drawEdge(choice.nodeKey, choice.successNodeKey, 'rgba(111, 157, 255, 0.8)');
+    }
+    if (choice.failNodeKey) {
+      drawEdge(choice.nodeKey, choice.failNodeKey, 'rgba(255, 107, 107, 0.75)', '6 6');
+    }
   });
+}
+
+function applyAutoLayout() {
+  if (!state.nodes.length) return;
+  const campaign = state.campaigns?.find(c => c.campaignKey === state.campaignKey);
+  const startKey = campaign?.startNodeKey ?? state.nodes[0].nodeKey;
+  const adjacency = new Map();
+  state.nodes.forEach(node => adjacency.set(node.nodeKey, []));
+  state.choices.forEach(choice => {
+    if (choice.successNodeKey) adjacency.get(choice.nodeKey)?.push(choice.successNodeKey);
+    if (choice.failNodeKey) adjacency.get(choice.nodeKey)?.push(choice.failNodeKey);
+  });
+
+  const levels = new Map();
+  const queue = [startKey];
+  levels.set(startKey, 0);
+  while (queue.length) {
+    const current = queue.shift();
+    const level = levels.get(current) ?? 0;
+    (adjacency.get(current) || []).forEach(next => {
+      if (!levels.has(next)) {
+        levels.set(next, level + 1);
+        queue.push(next);
+      }
+    });
+  }
+
+  const terminals = state.nodes.filter(n => n.terminalType !== 'NONE').map(n => n.nodeKey);
+  const maxLevel = Math.max(0, ...levels.values());
+  terminals.forEach(key => levels.set(key, Math.max(levels.get(key) ?? maxLevel, maxLevel + 1)));
+  state.nodes.forEach(node => {
+    if (!levels.has(node.nodeKey)) {
+      levels.set(node.nodeKey, maxLevel + 1);
+    }
+  });
+
+  const groups = {};
+  levels.forEach((level, key) => {
+    if (!groups[level]) groups[level] = [];
+    groups[level].push(key);
+  });
+
+  Object.entries(groups).forEach(([level, keys]) => {
+    keys.sort((a, b) => {
+      const outA = (adjacency.get(a) || []).length;
+      const outB = (adjacency.get(b) || []).length;
+      if (outA !== outB) return outB - outA;
+      return a.localeCompare(b);
+    });
+    keys.forEach((key, idx) => {
+      state.positions[key] = {
+        x: 140 + Number(level) * 320,
+        y: 120 + idx * 180,
+      };
+    });
+  });
+  savePositions();
+  render();
 }
 
 function renderInspector() {
@@ -444,6 +532,7 @@ campaignSelect.addEventListener('change', async () => {
 
 document.getElementById('addNodeBtn').onclick = () => createNode();
 document.getElementById('addChoiceBtn').onclick = () => createChoice();
+document.getElementById('autoLayoutBtn').onclick = () => applyAutoLayout();
 
 document.getElementById('exportBtn').onclick = () => {
   navigator.clipboard.writeText(JSON.stringify({ nodes: state.nodes, choices: state.choices }, null, 2));
