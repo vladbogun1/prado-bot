@@ -21,8 +21,8 @@ spring:
   flyway:
     enabled: true
     url: "jdbc:mysql://${DB_HOST:local}:${DB_PORT:3306}/${DB_NAME:voice_bot}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC"
-    username: "${DB_USER:root}"
-    password: "${DB_PASSWORD:root}"
+    user: "${DB_MIGRATION_USER:${DB_USER:root}}"
+    password: "${DB_MIGRATION_PASSWORD:${DB_PASSWORD:root}}"
 
 logging:
   level:
