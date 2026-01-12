@@ -14,4 +14,5 @@ import java.util.List;
 public class StoryRender {
     private MessageEmbed embed;
     private List<ActionRow> rows;
+    private StoryRecap recap;
 }

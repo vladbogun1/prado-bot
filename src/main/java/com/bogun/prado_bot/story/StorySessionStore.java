@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -83,6 +84,10 @@ public class StorySessionStore {
                 .createdAt(Instant.now())
                 .build();
         logRepository.save(log);
+    }
+
+    public List<StoryLogEntity> findLogs(long sessionId) {
+        return logRepository.findBySessionIdOrderByStepAsc(sessionId);
     }
 
     @Transactional
