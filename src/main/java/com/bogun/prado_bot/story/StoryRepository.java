@@ -23,12 +23,12 @@ public class StoryRepository {
                 WHERE campaign_key = :campaignKey
                 """;
         var params = Map.of("campaignKey", campaignKey);
-        var rows = jdbc.query(sql, params, (rs, rowNum) -> new StoryCampaign(
-                rs.getString("campaign_key"),
-                rs.getString("name"),
-                rs.getString("description"),
-                rs.getString("start_node_key")
-        ));
+        var rows = jdbc.query(sql, params, (rs, rowNum) -> StoryCampaign.builder()
+                .campaignKey(rs.getString("campaign_key"))
+                .name(rs.getString("name"))
+                .description(rs.getString("description"))
+                .startNodeKey(rs.getString("start_node_key"))
+                .build());
         return rows.stream().findFirst();
     }
 
@@ -40,16 +40,16 @@ public class StoryRepository {
                 WHERE campaign_key = :campaignKey AND node_key = :nodeKey
                 """;
         var params = Map.of("campaignKey", campaignKey, "nodeKey", nodeKey);
-        var rows = jdbc.query(sql, params, (rs, rowNum) -> new StoryNode(
-                rs.getString("campaign_key"),
-                rs.getString("node_key"),
-                rs.getString("title"),
-                rs.getString("variants_json"),
-                rs.getString("auto_effects_json"),
-                rs.getBoolean("is_terminal"),
-                rs.getString("terminal_type"),
-                rs.getString("reward_json")
-        ));
+        var rows = jdbc.query(sql, params, (rs, rowNum) -> StoryNode.builder()
+                .campaignKey(rs.getString("campaign_key"))
+                .nodeKey(rs.getString("node_key"))
+                .title(rs.getString("title"))
+                .variantsJson(rs.getString("variants_json"))
+                .autoEffectsJson(rs.getString("auto_effects_json"))
+                .terminal(rs.getBoolean("is_terminal"))
+                .terminalType(rs.getString("terminal_type"))
+                .rewardJson(rs.getString("reward_json"))
+                .build());
         return rows.stream().findFirst();
     }
 
@@ -63,21 +63,21 @@ public class StoryRepository {
                 ORDER BY sort_order ASC
                 """;
         var params = Map.of("campaignKey", campaignKey, "nodeKey", nodeKey);
-        return jdbc.query(sql, params, (rs, rowNum) -> new StoryChoice(
-                rs.getString("campaign_key"),
-                rs.getString("node_key"),
-                rs.getString("choice_key"),
-                rs.getString("label"),
-                rs.getInt("sort_order"),
-                rs.getString("conditions_json"),
-                rs.getString("check_json"),
-                rs.getString("success_node_key"),
-                rs.getString("fail_node_key"),
-                rs.getString("success_text"),
-                rs.getString("fail_text"),
-                rs.getString("success_effects_json"),
-                rs.getString("fail_effects_json")
-        ));
+        return jdbc.query(sql, params, (rs, rowNum) -> StoryChoice.builder()
+                .campaignKey(rs.getString("campaign_key"))
+                .nodeKey(rs.getString("node_key"))
+                .choiceKey(rs.getString("choice_key"))
+                .label(rs.getString("label"))
+                .sortOrder(rs.getInt("sort_order"))
+                .conditionsJson(rs.getString("conditions_json"))
+                .checkJson(rs.getString("check_json"))
+                .successNodeKey(rs.getString("success_node_key"))
+                .failNodeKey(rs.getString("fail_node_key"))
+                .successText(rs.getString("success_text"))
+                .failText(rs.getString("fail_text"))
+                .successEffectsJson(rs.getString("success_effects_json"))
+                .failEffectsJson(rs.getString("fail_effects_json"))
+                .build());
     }
 
     public void validateCampaign(String campaignKey) {
@@ -86,7 +86,7 @@ public class StoryRepository {
 
         var nodeCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM story_node WHERE campaign_key = :campaignKey AND node_key = :nodeKey",
-                Map.of("campaignKey", campaignKey, "nodeKey", campaign.startNodeKey()),
+                Map.of("campaignKey", campaignKey, "nodeKey", campaign.getStartNodeKey()),
                 Integer.class
         );
         if (nodeCount == null || nodeCount == 0) {

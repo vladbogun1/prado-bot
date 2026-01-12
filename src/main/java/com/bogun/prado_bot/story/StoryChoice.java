@@ -1,17 +1,26 @@
 package com.bogun.prado_bot.story;
 
-public record StoryChoice(
-        String campaignKey,
-        String nodeKey,
-        String choiceKey,
-        String label,
-        int sortOrder,
-        String conditionsJson,
-        String checkJson,
-        String successNodeKey,
-        String failNodeKey,
-        String successText,
-        String failText,
-        String successEffectsJson,
-        String failEffectsJson
-) {}
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class StoryChoice {
+    private String campaignKey;
+    private String nodeKey;
+    private String choiceKey;
+    private String label;
+    private int sortOrder;
+    private String conditionsJson;
+    private String checkJson;
+    private String successNodeKey;
+    private String failNodeKey;
+    private String successText;
+    private String failText;
+    private String successEffectsJson;
+    private String failEffectsJson;
+}

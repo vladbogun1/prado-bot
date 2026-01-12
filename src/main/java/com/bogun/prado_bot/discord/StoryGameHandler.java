@@ -42,7 +42,7 @@ public class StoryGameHandler {
                     e.getUser().getName(),
                     e.getMember().getEffectiveName()
             );
-            e.replyEmbeds(render.embed()).setComponents(render.rows()).setEphemeral(true).queue();
+            e.replyEmbeds(render.getEmbed()).setComponents(render.getRows()).setEphemeral(true).queue();
         } catch (StoryGameException ex) {
             e.reply(ex.getMessage()).setEphemeral(true).queue();
         }
@@ -79,7 +79,7 @@ public class StoryGameHandler {
                     e.getUser().getName(),
                     e.getMember() != null ? e.getMember().getEffectiveName() : e.getUser().getName()
             );
-            e.editMessageEmbeds(render.embed()).setComponents(render.rows()).queue();
+            e.editMessageEmbeds(render.getEmbed()).setComponents(render.getRows()).queue();
         } catch (StoryGameException ex) {
             e.reply(ex.getMessage()).setEphemeral(true).queue();
         }

@@ -80,7 +80,7 @@ public class StoryGameEngine {
 
         StoryCampaign campaign = storyRepository.findCampaign(campaignKey)
                 .orElseThrow(() -> new StoryGameException("Кампания не найдена."));
-        StoryNode startNode = storyRepository.findNode(campaignKey, campaign.startNodeKey())
+        StoryNode startNode = storyRepository.findNode(campaignKey, campaign.getStartNodeKey())
                 .orElseThrow(() -> new StoryGameException("Стартовый узел не найден."));
 
         StorySession session = new StorySession();
@@ -89,7 +89,7 @@ public class StoryGameEngine {
         session.setChannelId(channelId);
         session.setCampaignKey(campaignKey);
         session.setStatus(STATUS_ACTIVE);
-        session.setNodeKey(startNode.nodeKey());
+        session.setNodeKey(startNode.getNodeKey());
         session.setStep(0);
         session.setRngSeed(new SplittableRandom().nextLong());
         session.setStats(defaultStats());
@@ -132,20 +132,20 @@ public class StoryGameEngine {
                 .orElseThrow(() -> new StoryGameException("Текущий узел не найден."));
         List<StoryChoice> choices = storyRepository.findChoices(session.getCampaignKey(), session.getNodeKey());
         StoryChoice choice = choices.stream()
-                .filter(c -> c.choiceKey().equals(choiceKey))
+                .filter(c -> c.getChoiceKey().equals(choiceKey))
                 .findFirst()
                 .orElseThrow(() -> new StoryGameException("Выбор не найден."));
 
-        if (!conditionsMet(choice.conditionsJson(), session)) {
+        if (!conditionsMet(choice.getConditionsJson(), session)) {
             throw new StoryGameException("Условия для выбора не выполнены.");
         }
 
-        boolean success = rollSuccess(choice.checkJson(), session, choice.choiceKey());
+        boolean success = rollSuccess(choice.getCheckJson(), session, choice.getChoiceKey());
         List<Map<String, Object>> applied = new ArrayList<>();
-        String outcomeText = success ? choice.successText() : choice.failText();
-        String nextNodeKey = success ? choice.successNodeKey() : choice.failNodeKey();
+        String outcomeText = success ? choice.getSuccessText() : choice.getFailText();
+        String nextNodeKey = success ? choice.getSuccessNodeKey() : choice.getFailNodeKey();
 
-        applied.addAll(applyEffects(session, success ? choice.successEffectsJson() : choice.failEffectsJson()));
+        applied.addAll(applyEffects(session, success ? choice.getSuccessEffectsJson() : choice.getFailEffectsJson()));
 
         int nextStep = session.getStep() + 1;
         session.setStep(nextStep);
@@ -161,15 +161,15 @@ public class StoryGameEngine {
         applied.addAll(applyAutoEffects(session, nextNode, "node"));
 
         int payout = 0;
-        if (nextNode.terminal()) {
+        if (nextNode.isTerminal()) {
             payout = applyPayout(session, nextNode, username, memberName);
-            session.setStatus(statusFromTerminal(nextNode.terminalType()));
+            session.setStatus(statusFromTerminal(nextNode.getTerminalType()));
             session.setExpiresAt(now);
             session.setLastOutcomeText(outcomeText + "\n\nВыплата: " + payout + " монет.");
         }
 
         String deltaJson = writeJson(buildDelta(applied, payout));
-        sessionStore.insertLog(session.getId(), nextStep, currentNode.nodeKey(), choice.choiceKey(), success, deltaJson, outcomeText);
+        sessionStore.insertLog(session.getId(), nextStep, currentNode.getNodeKey(), choice.getChoiceKey(), success, deltaJson, outcomeText);
         sessionStore.updateSession(session);
 
         return renderSession(session);
@@ -180,7 +180,7 @@ public class StoryGameEngine {
                 .orElseThrow(() -> new StoryGameException("Узел не найден."));
         List<StoryChoice> choices = storyRepository.findChoices(session.getCampaignKey(), session.getNodeKey());
 
-        String variantText = selectVariant(node.variantsJson(), session, node.nodeKey());
+        String variantText = selectVariant(node.getVariantsJson(), session, node.getNodeKey());
         variantText = applyPlaceholders(variantText, session);
 
         StringBuilder description = new StringBuilder();
@@ -190,16 +190,16 @@ public class StoryGameEngine {
         description.append(variantText);
 
         MessageEmbed embed = new EmbedBuilder()
-                .setTitle(node.title())
+                .setTitle(node.getTitle())
                 .setDescription(description.toString())
                 .addField("HUD", hudLine(session), false)
                 .build();
 
         List<Button> buttons = new ArrayList<>();
-        if (STATUS_ACTIVE.equals(session.getStatus()) && !node.terminal()) {
+        if (STATUS_ACTIVE.equals(session.getStatus()) && !node.isTerminal()) {
             for (StoryChoice choice : choices) {
-                if (conditionsMet(choice.conditionsJson(), session)) {
-                    buttons.add(Button.primary(buttonId(session.getId(), choice.choiceKey(), session.getVersion()), choice.label()));
+                if (conditionsMet(choice.getConditionsJson(), session)) {
+                    buttons.add(Button.primary(buttonId(session.getId(), choice.getChoiceKey(), session.getVersion()), choice.getLabel()));
                 }
             }
         }
@@ -209,7 +209,10 @@ public class StoryGameEngine {
             rows.add(ActionRow.of(buttons.subList(i, Math.min(i + 5, buttons.size()))));
         }
 
-        return new StoryRender(embed, rows);
+        return StoryRender.builder()
+                .embed(embed)
+                .rows(rows)
+                .build();
     }
 
     private String hudLine(StorySession session) {
@@ -335,7 +338,7 @@ public class StoryGameEngine {
     }
 
     private List<Map<String, Object>> applyAutoEffects(StorySession session, StoryNode node, String salt) {
-        JsonNode autoNode = readJsonNode(node.autoEffectsJson());
+        JsonNode autoNode = readJsonNode(node.getAutoEffectsJson());
         if (autoNode == null || autoNode.isEmpty()) {
             return Collections.emptyList();
         }
@@ -343,7 +346,7 @@ public class StoryGameEngine {
         if (chance <= 0.0) {
             return Collections.emptyList();
         }
-        SplittableRandom rng = rng(session.getRngSeed(), session.getStep(), node.nodeKey() + ":" + salt);
+        SplittableRandom rng = rng(session.getRngSeed(), session.getStep(), node.getNodeKey() + ":" + salt);
         if (rng.nextDouble() > chance) {
             return Collections.emptyList();
         }
@@ -352,7 +355,7 @@ public class StoryGameEngine {
     }
 
     private int applyPayout(StorySession session, StoryNode node, String username, String memberName) {
-        JsonNode reward = readJsonNode(node.rewardJson());
+        JsonNode reward = readJsonNode(node.getRewardJson());
         JsonNode payoutNode = reward != null ? reward.path("payout") : null;
         if (payoutNode == null || payoutNode.isMissingNode()) {
             return 0;
@@ -371,7 +374,7 @@ public class StoryGameEngine {
         int min = bonusNode.path("min").asInt(0);
         int max = bonusNode.path("max").asInt(0);
         if (max >= min && max > 0) {
-            SplittableRandom rng = rng(session.getRngSeed(), session.getStep(), node.nodeKey() + ":bonus");
+            SplittableRandom rng = rng(session.getRngSeed(), session.getStep(), node.getNodeKey() + ":bonus");
             payout += rng.nextInt(max - min + 1) + min;
         }
 
@@ -490,6 +493,7 @@ public class StoryGameEngine {
         if (json == null || json.isBlank()) {
             return Collections.emptyList();
         }
+        json = sanitizeJson(json);
         try {
             return mapper.readValue(json, EFFECT_LIST);
         } catch (Exception e) {
@@ -501,11 +505,19 @@ public class StoryGameEngine {
         if (json == null || json.isBlank()) {
             return null;
         }
+        json = sanitizeJson(json);
         try {
             return mapper.readTree(json);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String sanitizeJson(String json) {
+        return json.replace(": +", ": ")
+                .replace(":+", ":")
+                .replace("[+", "[")
+                .replace(",+", ",");
     }
 
     private int toInt(Object value) {

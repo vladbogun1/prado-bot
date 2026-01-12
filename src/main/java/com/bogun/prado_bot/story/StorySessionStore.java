@@ -72,15 +72,16 @@ public class StorySessionStore {
     @Transactional
     public void insertLog(long sessionId, int step, String nodeKey, String choiceKey, boolean success,
                           String deltaJson, String outcomeText) {
-        StoryLogEntity log = new StoryLogEntity();
-        log.setSessionId(sessionId);
-        log.setStep(step);
-        log.setNodeKey(nodeKey);
-        log.setChoiceKey(choiceKey);
-        log.setSuccess(success);
-        log.setDeltaJson(deltaJson);
-        log.setOutcomeText(outcomeText);
-        log.setCreatedAt(Instant.now());
+        StoryLogEntity log = StoryLogEntity.builder()
+                .sessionId(sessionId)
+                .step(step)
+                .nodeKey(nodeKey)
+                .choiceKey(choiceKey)
+                .success(success)
+                .deltaJson(deltaJson)
+                .outcomeText(outcomeText)
+                .createdAt(Instant.now())
+                .build();
         logRepository.save(log);
     }
 
@@ -99,73 +100,73 @@ public class StorySessionStore {
     }
 
     private StorySession toDomain(StorySessionEntity entity) {
-        StorySession session = new StorySession();
-        session.setId(entity.getId());
-        session.setGuildId(entity.getGuildId());
-        session.setUserId(entity.getUserId());
-        session.setChannelId(entity.getChannelId());
-        session.setCampaignKey(entity.getCampaignKey());
-        session.setStatus(entity.getStatus());
-        session.setNodeKey(entity.getNodeKey());
-        session.setStep(entity.getStep());
-        session.setRngSeed(entity.getRngSeed());
-        session.setStats(readJson(entity.getStatsJson(), MAP_INT, Collections.emptyMap()));
-        session.setFlags(readJson(entity.getFlagsJson(), SET_STRING, Collections.emptySet()));
-        session.setInventory(readJson(entity.getInventoryJson(), MAP_INT, Collections.emptyMap()));
-        session.setEarnedTemp(entity.getEarnedTemp());
-        session.setLastOutcomeText(entity.getLastOutcomeText());
-        session.setVersion(entity.getVersion());
-        session.setCreatedAt(entity.getCreatedAt());
-        session.setLastActionAt(entity.getLastActionAt());
-        session.setExpiresAt(entity.getExpiresAt());
-        return session;
+        return StorySession.builder()
+                .id(entity.getId())
+                .guildId(entity.getGuildId())
+                .userId(entity.getUserId())
+                .channelId(entity.getChannelId())
+                .campaignKey(entity.getCampaignKey())
+                .status(entity.getStatus())
+                .nodeKey(entity.getNodeKey())
+                .step(entity.getStep())
+                .rngSeed(entity.getRngSeed())
+                .stats(readJson(entity.getStatsJson(), MAP_INT, Collections.emptyMap()))
+                .flags(readJson(entity.getFlagsJson(), SET_STRING, Collections.emptySet()))
+                .inventory(readJson(entity.getInventoryJson(), MAP_INT, Collections.emptyMap()))
+                .earnedTemp(entity.getEarnedTemp())
+                .lastOutcomeText(entity.getLastOutcomeText())
+                .version(entity.getVersion())
+                .createdAt(entity.getCreatedAt())
+                .lastActionAt(entity.getLastActionAt())
+                .expiresAt(entity.getExpiresAt())
+                .build();
     }
 
     private StorySessionEntity toEntity(StorySession session) {
-        StorySessionEntity entity = new StorySessionEntity();
-        entity.setId(session.getId());
-        entity.setGuildId(session.getGuildId());
-        entity.setUserId(session.getUserId());
-        entity.setChannelId(session.getChannelId());
-        entity.setCampaignKey(session.getCampaignKey());
-        entity.setStatus(session.getStatus());
-        entity.setNodeKey(session.getNodeKey());
-        entity.setStep(session.getStep());
-        entity.setRngSeed(session.getRngSeed());
-        entity.setStatsJson(writeJson(session.getStats()));
-        entity.setFlagsJson(writeJson(session.getFlags()));
-        entity.setInventoryJson(writeJson(session.getInventory()));
-        entity.setEarnedTemp(session.getEarnedTemp());
-        entity.setLastOutcomeText(session.getLastOutcomeText());
-        entity.setVersion(session.getVersion());
-        entity.setCreatedAt(session.getCreatedAt());
-        entity.setLastActionAt(session.getLastActionAt());
-        entity.setExpiresAt(session.getExpiresAt());
-        return entity;
+        return StorySessionEntity.builder()
+                .id(session.getId())
+                .guildId(session.getGuildId())
+                .userId(session.getUserId())
+                .channelId(session.getChannelId())
+                .campaignKey(session.getCampaignKey())
+                .status(session.getStatus())
+                .nodeKey(session.getNodeKey())
+                .step(session.getStep())
+                .rngSeed(session.getRngSeed())
+                .statsJson(writeJson(session.getStats()))
+                .flagsJson(writeJson(session.getFlags()))
+                .inventoryJson(writeJson(session.getInventory()))
+                .earnedTemp(session.getEarnedTemp())
+                .lastOutcomeText(session.getLastOutcomeText())
+                .version(session.getVersion())
+                .createdAt(session.getCreatedAt())
+                .lastActionAt(session.getLastActionAt())
+                .expiresAt(session.getExpiresAt())
+                .build();
     }
 
     private StoryCooldown toDomainCooldown(StoryCooldownEntity entity) {
-        StoryCooldown cooldown = new StoryCooldown();
-        cooldown.setId(entity.getId());
-        cooldown.setGuildId(entity.getGuildId());
-        cooldown.setUserId(entity.getUserId());
-        cooldown.setCampaignKey(entity.getCampaignKey());
-        cooldown.setLastFinishedAt(entity.getLastFinishedAt());
-        cooldown.setDailyEarned(entity.getDailyEarned());
-        cooldown.setDailyDate(entity.getDailyDate());
-        return cooldown;
+        return StoryCooldown.builder()
+                .id(entity.getId())
+                .guildId(entity.getGuildId())
+                .userId(entity.getUserId())
+                .campaignKey(entity.getCampaignKey())
+                .lastFinishedAt(entity.getLastFinishedAt())
+                .dailyEarned(entity.getDailyEarned())
+                .dailyDate(entity.getDailyDate())
+                .build();
     }
 
     private StoryCooldownEntity toEntity(StoryCooldown cooldown) {
-        StoryCooldownEntity entity = new StoryCooldownEntity();
-        entity.setId(cooldown.getId());
-        entity.setGuildId(cooldown.getGuildId());
-        entity.setUserId(cooldown.getUserId());
-        entity.setCampaignKey(cooldown.getCampaignKey());
-        entity.setLastFinishedAt(cooldown.getLastFinishedAt());
-        entity.setDailyEarned(cooldown.getDailyEarned());
-        entity.setDailyDate(cooldown.getDailyDate());
-        return entity;
+        return StoryCooldownEntity.builder()
+                .id(cooldown.getId())
+                .guildId(cooldown.getGuildId())
+                .userId(cooldown.getUserId())
+                .campaignKey(cooldown.getCampaignKey())
+                .lastFinishedAt(cooldown.getLastFinishedAt())
+                .dailyEarned(cooldown.getDailyEarned())
+                .dailyDate(cooldown.getDailyDate())
+                .build();
     }
 
     private <T> T readJson(String json, TypeReference<T> type, T fallback) {
