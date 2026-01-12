@@ -2,6 +2,16 @@
   "nodes": [
     {
       "campaignKey": "BUM_TO_BOSS",
+      "nodeKey": "N0_RULES",
+      "title": "Правила игры",
+      "variantsJson": "[\"Это текстовая история про путь от улицы к нормальной жизни. Твоя цель — выжить, поднять деньги и выбрать, кем ты станешь в конце.\",\"Каждый ход — выбор. Решения влияют на деньги, здоровье и розыск. Риск приносит выгоду, но может закончиться провалом.\",\"Суть проста: держи HP выше нуля, следи за розыском и решай, когда играть по правилам, а когда идти ва-банк.\"]",
+      "autoEffectsJson": "{}",
+      "terminal": false,
+      "terminalType": "NONE",
+      "rewardJson": "{}"
+    },
+    {
+      "campaignKey": "BUM_TO_BOSS",
       "nodeKey": "E_DEAD",
       "title": "Ты сдох",
       "variantsJson": "[\"Где-то хлопнуло. Ты даже не понял, откуда. Потом стало тихо.\",\"Ты падаешь на тёплый асфальт. Люди проходят мимо, как мимо рекламы.\"]",
@@ -332,6 +342,21 @@
     }
   ],
   "choices": [
+    {
+      "campaignKey": "BUM_TO_BOSS",
+      "nodeKey": "N0_RULES",
+      "choiceKey": "C0_BEGIN",
+      "label": "Начать историю",
+      "sortOrder": 1,
+      "conditionsJson": "{}",
+      "checkJson": "{}",
+      "successNodeKey": "N0_UNDER_PIER",
+      "failNodeKey": "N0_UNDER_PIER",
+      "successText": "Ты вдыхаешь солёный воздух и делаешь первый шаг.",
+      "failText": "Ты вдыхаешь солёный воздух и делаешь первый шаг.",
+      "successEffectsJson": "[]",
+      "failEffectsJson": "[]"
+    },
     {
       "campaignKey": "BUM_TO_BOSS",
       "nodeKey": "N0_UNDER_PIER",
