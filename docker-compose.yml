@@ -60,11 +60,12 @@ services:
       OLLAMA_RECAP_MODEL: ${OLLAMA_RECAP_MODEL:-llama3}
     ports:
       - "11434:11434"
+    entrypoint: ["/bin/sh", "-c"]
     command: >
-      sh -c "ollama serve & sleep 2 &&
+      ollama serve & sleep 2 &&
       ollama pull ${OLLAMA_NARRATOR_MODEL:-llama3} &&
       ollama pull ${OLLAMA_RECAP_MODEL:-llama3} &&
-      wait"
+      wait
     volumes:
       - ollama_data:/root/.ollama
 
