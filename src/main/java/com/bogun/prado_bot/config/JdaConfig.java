@@ -1,6 +1,7 @@
 package com.bogun.prado_bot.config;
 
 import com.bogun.prado_bot.discord.DiscordRouterListener;
+import com.bogun.prado_bot.config.StoryGameProperties;
 import lombok.AllArgsConstructor;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -16,7 +17,7 @@ import java.util.List;
 
 
 @Configuration
-@EnableConfigurationProperties(DiscordProperties.class)
+@EnableConfigurationProperties({DiscordProperties.class, StoryGameProperties.class})
 public class JdaConfig {
 
 //    private final DiscordRouterListener discordRouterListener;

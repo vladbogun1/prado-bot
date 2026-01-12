@@ -1,6 +1,7 @@
 package com.bogun.prado_bot.discord;
 
 import com.bogun.prado_bot.discord.board.VoiceBoardFormatter;
+import com.bogun.prado_bot.discord.StoryGameHandler;
 import com.bogun.prado_bot.service.VoiceBoardService;
 import com.bogun.prado_bot.service.VoiceLeaderboardService;
 import com.bogun.prado_bot.service.VoiceTrackingService;
@@ -23,6 +24,7 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -41,6 +43,7 @@ public class DiscordRouterListener implements EventListener {
     private final VoiceTrackingService tracking;
     private final VoiceBoardService boards;
     private final VoiceLeaderboardService leaderboard;
+    private final StoryGameHandler storyGameHandler;
 
     private static final String VOICE_INFO_COMMAND = "voice_info";
     private static final String VOICE_INFO_BUTTON_PREFIX = "voice-info:";
@@ -63,7 +66,9 @@ public class DiscordRouterListener implements EventListener {
                     Commands.slash("voiceboard", "Создать/обновить табло voice-статистики")
                             .addOption(OptionType.INTEGER, "refresh", "сек между обновлениями", false)
                             .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
-                    Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням")
+                    Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням"),
+                    Commands.slash(StoryGameHandler.COMMAND, "Запустить текстовую RPG")
+                            .addSubcommands(new SubcommandData("start", "Начать или продолжить историю"))
             ).queue();
             initialVoicesScan(e);
             return;
@@ -199,6 +204,10 @@ public class DiscordRouterListener implements EventListener {
         }
         if (VOICE_INFO_COMMAND.equals(e.getName())) {
             onVoiceInfoSlash(e);
+            return;
+        }
+        if (storyGameHandler.handleSlash(e)) {
+            return;
         }
     }
 
@@ -242,7 +251,16 @@ public class DiscordRouterListener implements EventListener {
 
     private void onButton(ButtonInteractionEvent e) {
         String id = e.getComponentId();
-        if (!id.startsWith(VOICE_INFO_BUTTON_PREFIX)) return;
+        if (id.startsWith(VOICE_INFO_BUTTON_PREFIX)) {
+            handleVoiceInfoButton(e, id);
+            return;
+        }
+        if (storyGameHandler.handleButton(e)) {
+            return;
+        }
+    }
+
+    private void handleVoiceInfoButton(ButtonInteractionEvent e, String id) {
 
         String payload = id.substring(VOICE_INFO_BUTTON_PREFIX.length());
         String[] parts = payload.split(":", 3);
