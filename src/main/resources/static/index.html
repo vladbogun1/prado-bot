@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prado Story Editor</title>
+  <link rel="stylesheet" href="/assets/story-editor.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Prado Story Editor</h1>
+      <p class="subtitle">Визуальный редактор сюжетных кампаний</p>
+    </div>
+    <div class="header-actions">
+      <select id="campaignSelect"></select>
+      <button class="ghost" id="exportBtn">Экспорт JSON</button>
+      <button class="primary" id="addNodeBtn">+ Новый узел</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="section-title">Узлы</div>
+      <div class="node-list" id="nodeList"></div>
+    </aside>
+
+    <main class="canvas" id="canvas">
+      <div class="canvas-grid"></div>
+      <svg class="connections" id="connections"></svg>
+    </main>
+
+    <aside class="inspector" id="inspector">
+      <div class="section-title">Параметры узла</div>
+      <div class="field">
+        <label>Название</label>
+        <input type="text" id="nodeTitle" />
+      </div>
+      <div class="field">
+        <label>Ключ узла</label>
+        <input type="text" id="nodeKey" disabled />
+      </div>
+      <div class="field">
+        <label>Описание (варианты)</label>
+        <textarea id="nodeVariants" placeholder="Каждая строка — новый вариант"></textarea>
+        <small>Поддержка плейсхолдеров: {hp}, {cash}, {wanted}, {street}, {charisma}, {discipline}</small>
+      </div>
+      <div class="field">
+        <label>Авто-эффекты</label>
+        <textarea id="nodeAuto" placeholder='{"chance":0.2,"effects":[{"op":"stat.add","key":"hp","value":5}]}'></textarea>
+      </div>
+      <div class="field">
+        <label>Тип концовки</label>
+        <select id="nodeTerminal">
+          <option value="NONE">Нет</option>
+          <option value="SUCCESS">Успех</option>
+          <option value="FAIL">Провал</option>
+          <option value="DEAD">Смерть</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Правила выплаты</label>
+        <textarea id="nodeReward" placeholder='{"payout":{"mode":"keep_all","terminal_bonus":{"min":3,"max":7},"cap_daily":50}}'></textarea>
+      </div>
+
+      <div class="section-title">Выборы</div>
+      <div id="choiceList"></div>
+      <button class="ghost" id="addChoiceBtn">+ Добавить выбор</button>
+
+      <div class="section-title">Превью Discord</div>
+      <div class="preview" id="preview"></div>
+    </aside>
+  </div>
+
+  <script src="/assets/story-editor.js"></script>
+</body>
+</html>
