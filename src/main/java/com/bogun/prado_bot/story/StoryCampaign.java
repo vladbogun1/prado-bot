@@ -14,4 +14,5 @@ public class StoryCampaign {
     private String name;
     private String description;
     private String startNodeKey;
+    private int cooldownMinutes;
 }

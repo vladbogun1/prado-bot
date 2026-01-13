@@ -18,7 +18,7 @@ public class StoryRepository {
 
     public Optional<StoryCampaign> findCampaign(String campaignKey) {
         var sql = """
-                SELECT campaign_key, name, description, start_node_key
+                SELECT campaign_key, name, description, start_node_key, cooldown_minutes
                 FROM story_campaign
                 WHERE campaign_key = :campaignKey
                 """;
@@ -28,8 +28,23 @@ public class StoryRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .startNodeKey(rs.getString("start_node_key"))
+                .cooldownMinutes(rs.getInt("cooldown_minutes"))
                 .build());
         return rows.stream().findFirst();
+    }
+
+    public List<StoryCampaign> findCampaigns() {
+        var sql = """
+                SELECT campaign_key, name, description, start_node_key, cooldown_minutes
+                FROM story_campaign
+                """;
+        return jdbc.query(sql, Map.of(), (rs, rowNum) -> StoryCampaign.builder()
+                .campaignKey(rs.getString("campaign_key"))
+                .name(rs.getString("name"))
+                .description(rs.getString("description"))
+                .startNodeKey(rs.getString("start_node_key"))
+                .cooldownMinutes(rs.getInt("cooldown_minutes"))
+                .build());
     }
 
     public Optional<StoryNode> findNode(String campaignKey, String nodeKey) {

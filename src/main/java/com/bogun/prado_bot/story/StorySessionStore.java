@@ -44,6 +44,15 @@ public class StorySessionStore {
     }
 
     @Transactional
+    public Optional<StorySession> findActiveSession(long guildId, long userId) {
+        return sessionRepository.findFirstByGuildIdAndUserIdAndStatusOrderByCreatedAtDesc(
+                guildId,
+                userId,
+                "ACTIVE"
+        ).map(this::toDomain);
+    }
+
+    @Transactional
     public Optional<StorySession> findSessionForUpdate(long sessionId) {
         return sessionRepository.findByIdForUpdate(sessionId).map(this::toDomain);
     }

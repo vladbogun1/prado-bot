@@ -55,10 +55,7 @@ public class StoryGameEngine {
 
     @Transactional
     public StoryRender startOrResume(long guildId, long userId, long channelId, String username, String memberName) {
-        String campaignKey = properties.getDefaultCampaignKey();
-        storyRepository.validateCampaign(campaignKey);
-
-        Optional<StorySession> existing = sessionStore.findActiveSession(guildId, userId, campaignKey);
+        Optional<StorySession> existing = sessionStore.findActiveSession(guildId, userId);
         if (existing.isPresent()) {
             StorySession session = existing.get();
             if (Instant.now().isAfter(session.getExpiresAt())) {
@@ -68,26 +65,16 @@ public class StoryGameEngine {
             }
         }
 
-        StoryCooldown cooldown = sessionStore.findCooldown(guildId, userId, campaignKey)
-                .orElse(null);
-        if (cooldown != null && cooldown.getLastFinishedAt() != null) {
-            Duration since = Duration.between(cooldown.getLastFinishedAt(), Instant.now());
-            if (since.compareTo(Duration.ofMinutes(properties.getCooldownMinutes())) < 0) {
-                long waitMinutes = Math.max(1, properties.getCooldownMinutes() - since.toMinutes());
-                throw new StoryGameException("Подожди ещё " + waitMinutes + " мин. до следующего запуска.");
-            }
-        }
-
-        StoryCampaign campaign = storyRepository.findCampaign(campaignKey)
-                .orElseThrow(() -> new StoryGameException("Кампания не найдена."));
-        StoryNode startNode = storyRepository.findNode(campaignKey, campaign.getStartNodeKey())
+        StoryCampaign campaign = pickAvailableCampaign(guildId, userId);
+        storyRepository.validateCampaign(campaign.getCampaignKey());
+        StoryNode startNode = storyRepository.findNode(campaign.getCampaignKey(), campaign.getStartNodeKey())
                 .orElseThrow(() -> new StoryGameException("Стартовый узел не найден."));
 
         StorySession session = new StorySession();
         session.setGuildId(guildId);
         session.setUserId(userId);
         session.setChannelId(channelId);
-        session.setCampaignKey(campaignKey);
+        session.setCampaignKey(campaign.getCampaignKey());
         session.setStatus(STATUS_ACTIVE);
         session.setNodeKey(startNode.getNodeKey());
         session.setStep(0);
@@ -107,6 +94,37 @@ public class StoryGameEngine {
         sessionStore.createSession(session);
 
         return renderSession(session);
+    }
+
+    private StoryCampaign pickAvailableCampaign(long guildId, long userId) {
+        List<StoryCampaign> campaigns = storyRepository.findCampaigns();
+        if (campaigns.isEmpty()) {
+            throw new StoryGameException("Нет доступных кампаний.");
+        }
+        Instant now = Instant.now();
+        List<StoryCampaign> available = new ArrayList<>();
+        long minWaitMinutes = Long.MAX_VALUE;
+        for (StoryCampaign campaign : campaigns) {
+            StoryCooldown cooldown = sessionStore.findCooldown(guildId, userId, campaign.getCampaignKey()).orElse(null);
+            if (cooldown == null || cooldown.getLastFinishedAt() == null) {
+                available.add(campaign);
+                continue;
+            }
+            Duration since = Duration.between(cooldown.getLastFinishedAt(), now);
+            long cooldownMinutes = Math.max(1, campaign.getCooldownMinutes());
+            if (since.compareTo(Duration.ofMinutes(cooldownMinutes)) >= 0) {
+                available.add(campaign);
+            } else {
+                long waitMinutes = Math.max(1, cooldownMinutes - since.toMinutes());
+                minWaitMinutes = Math.min(minWaitMinutes, waitMinutes);
+            }
+        }
+        if (available.isEmpty()) {
+            long waitMinutes = minWaitMinutes == Long.MAX_VALUE ? 1 : minWaitMinutes;
+            throw new StoryGameException("Подожди ещё " + waitMinutes + " мин. до следующего запуска.");
+        }
+        SplittableRandom rng = new SplittableRandom();
+        return available.get(rng.nextInt(available.size()));
     }
 
     @Transactional
