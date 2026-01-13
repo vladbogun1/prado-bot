@@ -21,7 +21,7 @@ public class StoryEditorService {
 
     public List<StoryCampaignDto> listCampaigns() {
         var sql = """
-                SELECT campaign_key, name, description, start_node_key
+                SELECT campaign_key, name, description, start_node_key, cooldown_minutes
                 FROM story_campaign
                 ORDER BY name
                 """;
@@ -30,6 +30,7 @@ public class StoryEditorService {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .startNodeKey(rs.getString("start_node_key"))
+                .cooldownMinutes(rs.getInt("cooldown_minutes"))
                 .build());
     }
 

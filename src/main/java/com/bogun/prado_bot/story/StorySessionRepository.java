@@ -19,6 +19,12 @@ public interface StorySessionRepository extends JpaRepository<StorySessionEntity
             String status
     );
 
+    Optional<StorySessionEntity> findFirstByGuildIdAndUserIdAndStatusOrderByCreatedAtDesc(
+            long guildId,
+            long userId,
+            String status
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from StorySessionEntity s where s.id = :id")
     Optional<StorySessionEntity> findByIdForUpdate(@Param("id") long id);

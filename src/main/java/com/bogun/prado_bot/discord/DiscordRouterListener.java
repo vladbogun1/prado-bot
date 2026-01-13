@@ -5,6 +5,7 @@ import com.bogun.prado_bot.discord.StoryGameHandler;
 import com.bogun.prado_bot.service.VoiceBoardService;
 import com.bogun.prado_bot.service.VoiceLeaderboardService;
 import com.bogun.prado_bot.service.VoiceTrackingService;
+import com.bogun.prado_bot.story.StoryGuildConfigService;
 import lombok.RequiredArgsConstructor;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.events.GenericEvent;
@@ -43,9 +44,11 @@ public class DiscordRouterListener implements EventListener {
     private final VoiceBoardService boards;
     private final VoiceLeaderboardService leaderboard;
     private final StoryGameHandler storyGameHandler;
+    private final StoryGuildConfigService storyGuildConfigService;
 
     private static final String VOICE_INFO_COMMAND = "voice_info";
     private static final String VOICE_INFO_BUTTON_PREFIX = "voice-info:";
+    private static final String STORY_CHANNEL_COMMAND = "story_channel";
 
     private enum VoiceInfoPeriod {
         DAY,
@@ -67,7 +70,9 @@ public class DiscordRouterListener implements EventListener {
                             .addOption(OptionType.INTEGER, "limit", "сколько строк показывать", false),
                     Commands.slash(VOICE_INFO_COMMAND, "Показать voice-статистику по дням"),
                     Commands.slash(StoryGameHandler.COMMAND, "Запустить текстовую RPG")
-                            .addOption(OptionType.STRING, "action", "start", false)
+                            .addOption(OptionType.STRING, "action", "start", false),
+                    Commands.slash(STORY_CHANNEL_COMMAND, "Настроить канал историй выживания")
+                            .addOption(OptionType.CHANNEL, "channel", "канал для публикации историй", true)
             ).queue();
             initialVoicesScan(e);
             return;
@@ -205,9 +210,27 @@ public class DiscordRouterListener implements EventListener {
             onVoiceInfoSlash(e);
             return;
         }
+        if (STORY_CHANNEL_COMMAND.equals(e.getName())) {
+            onStoryChannelSlash(e);
+            return;
+        }
         if (storyGameHandler.handleSlash(e)) {
             return;
         }
+    }
+
+    private void onStoryChannelSlash(SlashCommandInteractionEvent e) {
+        if (e.getGuild() == null) {
+            e.reply("Эта команда работает только на сервере.").setEphemeral(true).queue();
+            return;
+        }
+        var channel = e.getOption("channel").getAsChannel();
+        if (!channel.getType().isMessage()) {
+            e.reply("Нужен текстовый канал.").setEphemeral(true).queue();
+            return;
+        }
+        storyGuildConfigService.setStoryChannel(e.getGuild().getIdLong(), channel.getIdLong());
+        e.reply("Канал для историй выживания установлен: " + channel.getAsMention()).setEphemeral(true).queue();
     }
 
     private void onVoiceBoardSlash(SlashCommandInteractionEvent e) {
