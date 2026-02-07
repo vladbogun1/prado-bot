@@ -2,7 +2,10 @@ package com.bogun.prado_bot.discord;
 
 import com.bogun.prado_bot.story.StoryGameEngine;
 import com.bogun.prado_bot.story.StoryGameException;
+import com.bogun.prado_bot.story.StoryGuildConfigService;
+import com.bogun.prado_bot.story.StoryRecap;
 import com.bogun.prado_bot.story.StoryRender;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import org.springframework.stereotype.Component;
@@ -14,9 +17,11 @@ public class StoryGameHandler {
     public static final String BUTTON_PREFIX = "prado_game:";
 
     private final StoryGameEngine engine;
+    private final StoryGuildConfigService configService;
 
-    public StoryGameHandler(StoryGameEngine engine) {
+    public StoryGameHandler(StoryGameEngine engine, StoryGuildConfigService configService) {
         this.engine = engine;
+        this.configService = configService;
     }
 
     public boolean handleSlash(SlashCommandInteractionEvent e) {
@@ -80,9 +85,21 @@ public class StoryGameHandler {
                     e.getMember() != null ? e.getMember().getEffectiveName() : e.getUser().getName()
             );
             e.editMessageEmbeds(render.getEmbed()).setComponents(render.getRows()).queue();
+            if (render.getRecap() != null && e.getGuild() != null) {
+                publishRecap(e.getGuild().getIdLong(), render.getRecap(), e.getJDA()::getTextChannelById);
+            }
         } catch (StoryGameException ex) {
             e.reply(ex.getMessage()).setEphemeral(true).queue();
         }
         return true;
+    }
+
+    private void publishRecap(long guildId, StoryRecap recap, java.util.function.LongFunction<TextChannel> channelResolver) {
+        configService.find(guildId).ifPresent(config -> {
+            TextChannel channel = channelResolver.apply(config.getStoryChannelId());
+            if (channel != null) {
+                channel.sendMessage(recap.getMarkdown()).queue();
+            }
+        });
     }
 }

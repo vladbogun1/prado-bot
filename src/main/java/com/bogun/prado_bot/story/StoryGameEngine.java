@@ -55,10 +55,7 @@ public class StoryGameEngine {
 
     @Transactional
     public StoryRender startOrResume(long guildId, long userId, long channelId, String username, String memberName) {
-        String campaignKey = properties.getDefaultCampaignKey();
-        storyRepository.validateCampaign(campaignKey);
-
-        Optional<StorySession> existing = sessionStore.findActiveSession(guildId, userId, campaignKey);
+        Optional<StorySession> existing = sessionStore.findActiveSession(guildId, userId);
         if (existing.isPresent()) {
             StorySession session = existing.get();
             if (Instant.now().isAfter(session.getExpiresAt())) {
@@ -68,26 +65,16 @@ public class StoryGameEngine {
             }
         }
 
-        StoryCooldown cooldown = sessionStore.findCooldown(guildId, userId, campaignKey)
-                .orElse(null);
-        if (cooldown != null && cooldown.getLastFinishedAt() != null) {
-            Duration since = Duration.between(cooldown.getLastFinishedAt(), Instant.now());
-            if (since.compareTo(Duration.ofMinutes(properties.getCooldownMinutes())) < 0) {
-                long waitMinutes = Math.max(1, properties.getCooldownMinutes() - since.toMinutes());
-                throw new StoryGameException("Подожди ещё " + waitMinutes + " мин. до следующего запуска.");
-            }
-        }
-
-        StoryCampaign campaign = storyRepository.findCampaign(campaignKey)
-                .orElseThrow(() -> new StoryGameException("Кампания не найдена."));
-        StoryNode startNode = storyRepository.findNode(campaignKey, campaign.getStartNodeKey())
+        StoryCampaign campaign = pickAvailableCampaign(guildId, userId);
+        storyRepository.validateCampaign(campaign.getCampaignKey());
+        StoryNode startNode = storyRepository.findNode(campaign.getCampaignKey(), campaign.getStartNodeKey())
                 .orElseThrow(() -> new StoryGameException("Стартовый узел не найден."));
 
         StorySession session = new StorySession();
         session.setGuildId(guildId);
         session.setUserId(userId);
         session.setChannelId(channelId);
-        session.setCampaignKey(campaignKey);
+        session.setCampaignKey(campaign.getCampaignKey());
         session.setStatus(STATUS_ACTIVE);
         session.setNodeKey(startNode.getNodeKey());
         session.setStep(0);
@@ -107,6 +94,37 @@ public class StoryGameEngine {
         sessionStore.createSession(session);
 
         return renderSession(session);
+    }
+
+    private StoryCampaign pickAvailableCampaign(long guildId, long userId) {
+        List<StoryCampaign> campaigns = storyRepository.findCampaigns();
+        if (campaigns.isEmpty()) {
+            throw new StoryGameException("Нет доступных кампаний.");
+        }
+        Instant now = Instant.now();
+        List<StoryCampaign> available = new ArrayList<>();
+        long minWaitMinutes = Long.MAX_VALUE;
+        for (StoryCampaign campaign : campaigns) {
+            StoryCooldown cooldown = sessionStore.findCooldown(guildId, userId, campaign.getCampaignKey()).orElse(null);
+            if (cooldown == null || cooldown.getLastFinishedAt() == null) {
+                available.add(campaign);
+                continue;
+            }
+            Duration since = Duration.between(cooldown.getLastFinishedAt(), now);
+            long cooldownMinutes = Math.max(1, campaign.getCooldownMinutes());
+            if (since.compareTo(Duration.ofMinutes(cooldownMinutes)) >= 0) {
+                available.add(campaign);
+            } else {
+                long waitMinutes = Math.max(1, cooldownMinutes - since.toMinutes());
+                minWaitMinutes = Math.min(minWaitMinutes, waitMinutes);
+            }
+        }
+        if (available.isEmpty()) {
+            long waitMinutes = minWaitMinutes == Long.MAX_VALUE ? 1 : minWaitMinutes;
+            throw new StoryGameException("Подожди ещё " + waitMinutes + " мин. до следующего запуска.");
+        }
+        SplittableRandom rng = new SplittableRandom();
+        return available.get(rng.nextInt(available.size()));
     }
 
     @Transactional
@@ -161,6 +179,7 @@ public class StoryGameEngine {
         applied.addAll(applyAutoEffects(session, nextNode, "node"));
 
         int payout = 0;
+        StoryRecap recap = null;
         if (nextNode.isTerminal()) {
             payout = applyPayout(session, nextNode, username, memberName);
             session.setStatus(statusFromTerminal(nextNode.getTerminalType()));
@@ -171,11 +190,18 @@ public class StoryGameEngine {
         String deltaJson = writeJson(buildDelta(applied, payout));
         sessionStore.insertLog(session.getId(), nextStep, currentNode.getNodeKey(), choice.getChoiceKey(), success, deltaJson, outcomeText);
         sessionStore.updateSession(session);
+        if (nextNode.isTerminal()) {
+            recap = buildRecap(session, nextNode);
+        }
 
-        return renderSession(session);
+        return renderSession(session, recap);
     }
 
     private StoryRender renderSession(StorySession session) {
+        return renderSession(session, null);
+    }
+
+    private StoryRender renderSession(StorySession session, StoryRecap recap) {
         StoryNode node = storyRepository.findNode(session.getCampaignKey(), session.getNodeKey())
                 .orElseThrow(() -> new StoryGameException("Узел не найден."));
         List<StoryChoice> choices = storyRepository.findChoices(session.getCampaignKey(), session.getNodeKey());
@@ -212,7 +238,48 @@ public class StoryGameEngine {
         return StoryRender.builder()
                 .embed(embed)
                 .rows(rows)
+                .recap(recap)
                 .build();
+    }
+
+    private StoryRecap buildRecap(StorySession session, StoryNode terminalNode) {
+        var logs = sessionStore.findLogs(session.getId());
+        var campaign = storyRepository.findCampaign(session.getCampaignKey()).orElse(null);
+        String campaignTitle = campaign != null ? campaign.getName() : session.getCampaignKey();
+        StringBuilder sb = new StringBuilder();
+        sb.append("**История выживания**\n");
+        sb.append("**Игрок:** <@").append(session.getUserId()).append(">\n");
+        sb.append("**Кампания:** ").append(campaignTitle).append("\n");
+        sb.append("**Финал:** ").append(terminalNode.getTitle()).append("\n");
+        sb.append("**Итог:** ❤️ ").append(session.getStats().getOrDefault("hp", 0))
+                .append(" | 💵 ").append(session.getStats().getOrDefault("cash", 0))
+                .append(" | 🚨 ").append(session.getStats().getOrDefault("wanted", 0))
+                .append(" | 🪙 ").append(session.getEarnedTemp()).append("\n\n");
+        sb.append("**Путь:**\n");
+        for (var log : logs) {
+            StoryNode node = storyRepository.findNode(session.getCampaignKey(), log.getNodeKey()).orElse(null);
+            String nodeTitle = node != null ? node.getTitle() : log.getNodeKey();
+            String choiceLabel = choiceLabel(session.getCampaignKey(), log.getNodeKey(), log.getChoiceKey());
+            sb.append("• **").append(nodeTitle).append("** → _").append(choiceLabel).append("_\n");
+            sb.append("  ").append(cleanLine(log.getOutcomeText())).append("\n");
+        }
+        String text = sb.toString();
+        if (text.length() > 1900) {
+            text = text.substring(0, 1850) + "\n…";
+        }
+        return new StoryRecap(session.getGuildId(), session.getUserId(), text);
+    }
+
+    private String choiceLabel(String campaignKey, String nodeKey, String choiceKey) {
+        return storyRepository.findChoices(campaignKey, nodeKey).stream()
+                .filter(choice -> choiceKey.equals(choice.getChoiceKey()))
+                .findFirst()
+                .map(StoryChoice::getLabel)
+                .orElse(choiceKey);
+    }
+
+    private String cleanLine(String text) {
+        return text == null ? "" : text.replace("\n", " ").trim();
     }
 
     private String hudLine(StorySession session) {

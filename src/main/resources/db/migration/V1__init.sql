@@ -10,7 +10,7 @@ CREATE TABLE voice_user
     PRIMARY KEY (guild_id, user_id),
     muted       BIT(1)       NOT NULL DEFAULT 0,
     deafened    BIT(1)       NOT NULL DEFAULT 0,
-    suppressed  BIT(1)       NOT NULL DEFAULT 0;
+    suppressed  BIT(1)       NOT NULL DEFAULT 0
 );
 
 CREATE TABLE voice_session
