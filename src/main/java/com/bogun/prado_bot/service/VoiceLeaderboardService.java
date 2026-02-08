@@ -54,6 +54,39 @@ public class VoiceLeaderboardService {
         return getTopForRange(guildId, start, end, limit, includeActive, Instant.now());
     }
 
+    @Transactional(readOnly = true)
+    public Optional<TodayRow> getUserForRange(long guildId, long userId, Instant start, Instant end,
+                                              boolean includeActive) {
+        Instant now = Instant.now();
+        var totals = sessionRepo.aggregateForUserRange(guildId, userId, start, end);
+        long sessions = totals != null ? totals.getSessions() : 0;
+        long totalSeconds = totals != null ? totals.getSeconds() : 0;
+
+        if (includeActive) {
+            List<VoiceSession> active =
+                    sessionRepo.findAllByGuildIdAndUserIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+                            guildId, userId, start, end
+                    );
+            for (VoiceSession s : active) {
+                if (s.isPaused()) continue;
+                Instant last = s.getLastStateAt();
+                if (last == null) continue;
+                long extra = Duration.between(last, now).getSeconds();
+                if (extra < 0) extra = 0;
+                totalSeconds += extra;
+            }
+        }
+
+        var user = userRepo.findById(new VoiceUser.VoiceUserId(guildId, userId));
+        long points = user.map(VoiceUser::getPoints).orElse(0L);
+
+        if (sessions == 0 && totalSeconds == 0) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new TodayRow(userId, points, (int) sessions, totalSeconds));
+    }
+
     private List<TodayRow> getTopForDate(long guildId, LocalDate date, int limit, Instant now, ZoneId zone) {
         int lim = limit > 0 ? limit : 20;
 

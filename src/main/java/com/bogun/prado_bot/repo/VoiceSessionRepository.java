@@ -23,6 +23,11 @@ public interface VoiceSessionRepository extends JpaRepository<VoiceSession, Long
         long getSeconds();
     }
 
+    interface UserRangeTotals {
+        long getSessions();
+        long getSeconds();
+    }
+
     @Query("""
             select
                 s.userId as userId,
@@ -39,7 +44,27 @@ public interface VoiceSessionRepository extends JpaRepository<VoiceSession, Long
             @Param("end") Instant end
     );
 
+    @Query("""
+            select
+                count(s) as sessions,
+                coalesce(sum(s.activeSeconds), 0) as seconds
+            from VoiceSession s
+            where s.guildId = :guildId
+              and s.userId = :userId
+              and s.startedAt >= :start and s.startedAt < :end
+           """)
+    UserRangeTotals aggregateForUserRange(
+            @Param("guildId") Long guildId,
+            @Param("userId") Long userId,
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
+
     List<VoiceSession> findAllByGuildIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
             Long guildId, Instant start, Instant end
+    );
+
+    List<VoiceSession> findAllByGuildIdAndUserIdAndEndedAtIsNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+            Long guildId, Long userId, Instant start, Instant end
     );
 }
